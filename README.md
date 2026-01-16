@@ -13,8 +13,8 @@ pip install uv
 ```
 
 ```powershell
-git clone https://github.com/MoFishSuperMan/LibraryDBViewProject.git
-cd LibraryDBViewProject
+git clone https://github.com/MoFishSuperMan/FleetDistributionSystem
+cd FleetDistributionSystem
 uv sync
 ```
 
