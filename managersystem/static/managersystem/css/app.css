@@ -1,0 +1,155 @@
+body {
+    font-family: "Montserrat", "Segoe UI", system-ui, -apple-system, sans-serif;
+    min-height: 100vh;
+    background-image: url("../images/background.jpg");
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+    position: relative;
+}
+
+body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background: rgba(248, 250, 252, 0.75);
+    z-index: -1;
+}
+
+.mynav .navbar-brand {
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+.mynav .nav-link {
+    color: rgba(255, 255, 255, 0.85);
+    margin: 0 8px;
+    transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.mynav .nav-link:hover {
+    color: #ffffff;
+    transform: translateY(-1px);
+}
+
+.page-animate {
+    animation: fadeInUp 0.6s ease;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.headerdiv {
+    background: rgba(255, 255, 255, 0.6);
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-bottom: 24px;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+}
+
+.headertext {
+    margin-bottom: 6px;
+    font-weight: 600;
+}
+
+.card {
+    background: rgba(255, 255, 255, 0.9);
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+    animation: fadeInUp 0.6s ease;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.hover-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 18px 36px rgba(15, 23, 42, 0.12);
+}
+
+.card-header {
+    background: transparent;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.card-header strong {
+    font-weight: 600;
+}
+
+.table-responsive {
+    background: rgba(255, 255, 255, 0.7);
+    border-radius: 12px;
+    padding: 6px;
+}
+
+table th,
+table td {
+    vertical-align: middle;
+}
+
+.table {
+    margin-bottom: 0;
+}
+
+.table thead th {
+    background: rgba(255, 255, 255, 0.8);
+}
+
+.table tbody tr {
+    transition: background-color 0.2s ease;
+}
+
+.btn {
+    border-radius: 999px;
+    font-weight: 600;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 18px rgba(15, 23, 42, 0.12);
+}
+
+.form-control,
+.form-select {
+    border-radius: 10px;
+    border: 1px solid rgba(148, 163, 184, 0.4);
+    background: rgba(255, 255, 255, 0.85);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.form-control:focus,
+.form-select:focus {
+    border-color: rgba(59, 130, 246, 0.6);
+    box-shadow: 0 0 0 0.2rem rgba(59, 130, 246, 0.15);
+}
+
+.alert {
+    border-radius: 12px;
+}
+
+.stat-card .card-body {
+    position: relative;
+    padding-left: 64px;
+}
+
+.icon-badge {
+    position: absolute;
+    top: 18px;
+    left: 20px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #ffffff;
+    font-size: 16px;
+}

@@ -1,0 +1,62 @@
+{% extends "managersystem/base.html" %}
+
+{% block content %}
+<div class="headerdiv text-center mb-4">
+    <h1 class="h3 headertext">配送中心管理后台</h1>
+    <p class="text-muted mb-0">查看和管理所有配送中心的资源情况</p>
+</div>
+
+<div class="row g-4">
+    {% for item in center_stats %}
+    <div class="col-md-6 col-lg-4">
+        <div class="card border-0 shadow-sm h-100 hover-shadow" style="transition: all 0.3s;">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-3">
+                    <div>
+                        <h5 class="card-title mb-1">{{ item.center.center_name }}</h5>
+                        <p class="text-muted small mb-0">{{ item.center.address }}</p>
+                    </div>
+                    <span class="badge bg-primary">ID: {{ item.center.center_id }}</span>
+                </div>
+                
+                <div class="row text-center mb-3">
+                    <div class="col-4">
+                        <div class="p-2 bg-light rounded">
+                            <div class="h4 mb-0 text-primary">{{ item.fleet_count }}</div>
+                            <small class="text-muted">车队</small>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="p-2 bg-light rounded">
+                            <div class="h4 mb-0 text-success">{{ item.vehicle_count }}</div>
+                            <small class="text-muted">车辆</small>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="p-2 bg-light rounded">
+                            <div class="h4 mb-0 text-info">{{ item.driver_count }}</div>
+                            <small class="text-muted">司机</small>
+                        </div>
+                    </div>
+                </div>
+                
+                <a href="{% url 'center_detail' item.center.center_id %}" class="btn btn-outline-primary w-100">
+                    <i class="fa fa-search me-1"></i> 查看详情
+                </a>
+            </div>
+        </div>
+    </div>
+    {% empty %}
+    <div class="col-12">
+        <div class="alert alert-info text-center">暂无配送中心数据</div>
+    </div>
+    {% endfor %}
+</div>
+
+<style>
+.hover-shadow:hover {
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
+    transform: translateY(-2px);
+}
+</style>
+{% endblock %}

@@ -1,0 +1,102 @@
+﻿{% extends "managersystem/base.html" %}
+
+{% block content %}
+<div class="headerdiv text-center">
+    <h1 class="h3 headertext">异常管理</h1>
+    <p class="text-muted mb-0">记录异常事件并跟踪处理状态。</p>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-lg-5">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white">
+                <strong>新增异常记录</strong>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label">车辆</label>
+                        <select class="form-select" name="vehicle_plate" required>
+                            <option value="">请选择车辆</option>
+                            {% for vehicle in vehicles %}
+                                <option value="{{ vehicle.plate_number }}">{{ vehicle.plate_number }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">司机</label>
+                        <select class="form-select" name="driver_id" required>
+                            <option value="">请选择司机</option>
+                            {% for driver in drivers %}
+                                <option value="{{ driver.driver_id }}">{{ driver.driver_id }} - {{ driver.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">异常类型</label>
+                        <select class="form-select" name="exception_type" required>
+                            <option value="">请选择类型</option>
+                            {% for code, label in exception_types %}
+                                <option value="{{ code }}">{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">具体事件</label>
+                        <input type="text" class="form-control" name="specific_event">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">罚款金额</label>
+                        <input type="number" class="form-control" name="fine_amount" step="0.01">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">描述</label>
+                        <textarea class="form-control" name="description" rows="3"></textarea>
+                    </div>
+                    <button class="btn btn-warning w-100" type="submit">提交异常</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-7">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white">
+                <strong>最近异常记录</strong>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>记录ID</th>
+                                <th>车辆</th>
+                                <th>司机</th>
+                                <th>异常类型</th>
+                                <th>处理状态</th>
+                                <th>发生时间</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for record in exceptions %}
+                            <tr>
+                                <td>{{ record.record_id }}</td>
+                                <td>{{ record.vehicle_plate.plate_number }}</td>
+                                <td>{{ record.driver.name }}</td>
+                                <td>{{ record.exception_type_label }}</td>
+                                <td>{{ record.handle_status_label }}</td>
+                                <td>{{ record.occur_time }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="6" class="text-muted text-center">暂无异常记录。</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

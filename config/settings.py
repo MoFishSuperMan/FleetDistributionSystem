@@ -67,6 +67,12 @@ TEMPLATES = [
     },
 ]
 
+
+AUTHENTICATION_BACKENDS = [
+    'managersystem.backends.FleetAuthBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
+
 WSGI_APPLICATION = "config.wsgi.application"
 
 
@@ -82,8 +88,7 @@ DATABASES = {
         "HOST": "localhost",  # 或者是您的服务器地址，例如 ".\SQLEXPRESS" 或 "127.0.0.1"
         "PORT": "",  # 默认 1433
         "OPTIONS": {
-            "driver": "ODBC Driver 17 for SQL Server",  # 请确保您的系统安装了相应的 ODBC 驱动
-            # "extra_params": "TrustServerCertificate=yes", # 如果遇到 SSL 证书报错，请取消注释这一行
+            "driver": "ODBC Driver 17 for SQL Server",
         },
     }
 }

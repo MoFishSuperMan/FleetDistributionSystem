@@ -44,8 +44,8 @@ CREATE TABLE Vehicle (
     max_volume DECIMAL(10, 2) NOT NULL,         -- 最大容积
     status NVARCHAR(20) NOT NULL DEFAULT 'Idle',-- 车辆状态
     
-    -- 状态约束依据 condition.txt
-    CONSTRAINT CK_Vehicle_Status CHECK (status IN ('Idle', 'Loading', 'Busy', 'Maintenance', 'Exception')),
+    -- 状态约束：空闲、运输中、维修中、异常
+    CONSTRAINT CK_Vehicle_Status CHECK (status IN ('Idle', 'Busy', 'Maintenance', 'Exception')),
     CONSTRAINT FK_Vehicle_Fleet FOREIGN KEY (fleet_id) REFERENCES Fleet(fleet_id)
 );
 GO
@@ -55,6 +55,7 @@ IF OBJECT_ID('Driver', 'U') IS NOT NULL DROP TABLE Driver;
 CREATE TABLE Driver (
     driver_id NVARCHAR(20) PRIMARY KEY,  -- 司机工号
     name NVARCHAR(50) NOT NULL,          -- 姓名
+    password NVARCHAR(50) NOT NULL DEFAULT '123456', -- 密码 
     license_level NVARCHAR(10) NOT NULL, -- 驾照等级
     phone NVARCHAR(20),                  -- 电话
     fleet_id INT NOT NULL,               -- 所属车队

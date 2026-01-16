@@ -1,0 +1,185 @@
+﻿{% extends "managersystem/base.html" %}
+
+{% block content %}
+<div class="headerdiv text-center">
+    <h1 class="h3 headertext">车辆管理</h1>
+    <p class="text-muted mb-0">维护车辆信息与可用状态。</p>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-lg-8">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white">
+                <strong>车辆列表</strong>
+            </div>
+            <div class="card-body">
+                <form class="row g-3 mb-3" method="get">
+                    <div class="col-md-4">
+                        <label class="form-label">车队</label>
+                        <select class="form-select" name="fleet_id">
+                            <option value="">全部车队</option>
+                            {% for fleet in fleets %}
+                                <option value="{{ fleet.fleet_id }}" {% if fleet_filter == fleet.fleet_id|stringformat:"s" %}selected{% endif %}>
+                                    {{ fleet.fleet_name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">状态</label>
+                        <select class="form-select" name="status">
+                            <option value="">全部状态</option>
+                            {% for code, label in status_choices %}
+                                <option value="{{ code }}" {% if status_filter == code %}selected{% endif %}>
+                                    {{ label }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4 d-flex align-items-end">
+                        <button class="btn btn-primary w-100" type="submit">筛选</button>
+                    </div>
+                </form>
+
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>车牌号</th>
+                                <th>车队</th>
+                                <th>状态</th>
+                                <th class="text-end">最大载重</th>
+                                <th class="text-end">最大容积</th>
+                                <th class="text-center">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for vehicle in vehicles %}
+                            <tr>
+                                <td>{{ vehicle.plate_number }}</td>
+                                <td>{{ vehicle.fleet.fleet_name }}</td>
+                                <td>{{ vehicle.status_label }}</td>
+                                <td class="text-end">{{ vehicle.max_weight }}</td>
+                                <td class="text-end">{{ vehicle.max_volume }}</td>
+                                <td class="text-center">
+                                    <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editModal{{ vehicle.plate_number|slugify }}">
+                                        <i class="fa fa-edit"></i> 编辑
+                                    </button>
+                                    <form method="post" class="d-inline" onsubmit="return confirm('确定要删除车辆 {{ vehicle.plate_number }} 吗？');">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="delete">
+                                        <input type="hidden" name="plate_number" value="{{ vehicle.plate_number }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">
+                                            <i class="fa fa-trash"></i> 删除
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            
+                            <!-- 编辑模态框 -->
+                            <div class="modal fade" id="editModal{{ vehicle.plate_number|slugify }}" tabindex="-1">
+                                <div class="modal-dialog">
+                                    <div class="modal-content">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title">编辑车辆 - {{ vehicle.plate_number }}</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <form method="post">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="action" value="edit">
+                                            <input type="hidden" name="plate_number" value="{{ vehicle.plate_number }}">
+                                            <div class="modal-body">
+                                                <div class="mb-3">
+                                                    <label class="form-label">车牌号</label>
+                                                    <input type="text" class="form-control" value="{{ vehicle.plate_number }}" readonly>
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-label">车队</label>
+                                                    <select class="form-select" name="fleet_id" required>
+                                                        {% for fleet in fleets %}
+                                                            <option value="{{ fleet.fleet_id }}" {% if vehicle.fleet_id == fleet.fleet_id %}selected{% endif %}>
+                                                                {{ fleet.fleet_name }}
+                                                            </option>
+                                                        {% endfor %}
+                                                    </select>
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-label">最大载重（吨）</label>
+                                                    <input type="number" class="form-control" name="max_weight" step="0.01" value="{{ vehicle.max_weight }}" required>
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-label">最大容积（立方米）</label>
+                                                    <input type="number" class="form-control" name="max_volume" step="0.01" value="{{ vehicle.max_volume }}" required>
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-label">状态</label>
+                                                    <select class="form-select" name="status">
+                                                        {% for code, label in status_choices %}
+                                                            <option value="{{ code }}" {% if vehicle.status == code %}selected{% endif %}>{{ label }}</option>
+                                                        {% endfor %}
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                                                <button type="submit" class="btn btn-primary">保存修改</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                            {% empty %}
+                            <tr>
+                                <td colspan="6" class="text-muted text-center">暂无车辆数据。</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white">
+                <strong>新增车辆</strong>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label">车牌号</label>
+                        <input type="text" class="form-control" name="plate_number" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">车队</label>
+                        <select class="form-select" name="fleet_id" required>
+                            <option value="">请选择车队</option>
+                            {% for fleet in fleets %}
+                                <option value="{{ fleet.fleet_id }}">{{ fleet.fleet_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">最大载重（吨）</label>
+                        <input type="number" class="form-control" name="max_weight" step="0.01" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">最大容积（立方米）</label>
+                        <input type="number" class="form-control" name="max_volume" step="0.01" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">状态</label>
+                        <select class="form-select" name="status">
+                            {% for code, label in status_choices %}
+                                <option value="{{ code }}">{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button class="btn btn-success w-100" type="submit">创建车辆</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

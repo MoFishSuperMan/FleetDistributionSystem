@@ -1,0 +1,166 @@
+﻿{% extends "managersystem/base.html" %}
+
+{% block content %}
+<div class="headerdiv text-center">
+    <h1 class="h3 headertext">司机管理</h1>
+    <p class="text-muted mb-0">维护司机信息与车队归属。</p>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-lg-8">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white">
+                <strong>司机列表</strong>
+            </div>
+            <div class="card-body">
+                <form class="row g-3 mb-3" method="get">
+                    <div class="col-md-6">
+                        <label class="form-label">车队</label>
+                        <select class="form-select" name="fleet_id">
+                            <option value="">全部车队</option>
+                            {% for fleet in fleets %}
+                                <option value="{{ fleet.fleet_id }}" {% if fleet_filter == fleet.fleet_id|stringformat:"s" %}selected{% endif %}>
+                                    {{ fleet.fleet_name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-6 d-flex align-items-end">
+                        <button class="btn btn-primary w-100" type="submit">筛选</button>
+                    </div>
+                </form>
+
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>司机工号</th>
+                                <th>姓名</th>
+                                <th>驾照等级</th>
+                                <th>联系电话</th>
+                                <th>车队</th>
+                                <th class="text-center">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for driver in drivers %}
+                            <tr>
+                                <td>{{ driver.driver_id }}</td>
+                                <td>{{ driver.name }}</td>
+                                <td>{{ driver.license_level }}</td>
+                                <td>{{ driver.phone }}</td>
+                                <td>{{ driver.fleet.fleet_name }}</td>
+                                <td class="text-center">
+                                    <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editDriverModal{{ driver.driver_id|slugify }}">
+                                        <i class="fa fa-edit"></i> 编辑
+                                    </button>
+                                    <form method="post" class="d-inline" onsubmit="return confirm('确定要删除司机 {{ driver.name }} 吗？');">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="delete">
+                                        <input type="hidden" name="driver_id" value="{{ driver.driver_id }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">
+                                            <i class="fa fa-trash"></i> 删除
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            
+                            <!-- 编辑模态框 -->
+                            <div class="modal fade" id="editDriverModal{{ driver.driver_id|slugify }}" tabindex="-1">
+                                <div class="modal-dialog">
+                                    <div class="modal-content">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title">编辑司机 - {{ driver.driver_id }}</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <form method="post">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="action" value="edit">
+                                            <input type="hidden" name="driver_id" value="{{ driver.driver_id }}">
+                                            <div class="modal-body">
+                                                <div class="mb-3">
+                                                    <label class="form-label">司机工号</label>
+                                                    <input type="text" class="form-control" value="{{ driver.driver_id }}" readonly>
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-label">姓名</label>
+                                                    <input type="text" class="form-control" name="name" value="{{ driver.name }}" required>
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-label">驾照等级</label>
+                                                    <input type="text" class="form-control" name="license_level" value="{{ driver.license_level }}" required>
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-label">联系电话</label>
+                                                    <input type="text" class="form-control" name="phone" value="{{ driver.phone }}">
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-label">车队</label>
+                                                    <select class="form-select" name="fleet_id" required>
+                                                        {% for fleet in fleets %}
+                                                            <option value="{{ fleet.fleet_id }}" {% if driver.fleet_id == fleet.fleet_id %}selected{% endif %}>
+                                                                {{ fleet.fleet_name }}
+                                                            </option>
+                                                        {% endfor %}
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                                                <button type="submit" class="btn btn-primary">保存修改</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                            {% empty %}
+                            <tr>
+                                <td colspan="6" class="text-muted text-center">暂无司机数据。</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white">
+                <strong>新增司机</strong>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label">司机工号</label>
+                        <input type="text" class="form-control" name="driver_id" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">姓名</label>
+                        <input type="text" class="form-control" name="name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">驾照等级</label>
+                        <input type="text" class="form-control" name="license_level" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">联系电话</label>
+                        <input type="text" class="form-control" name="phone">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">车队</label>
+                        <select class="form-select" name="fleet_id" required>
+                            <option value="">请选择车队</option>
+                            {% for fleet in fleets %}
+                                <option value="{{ fleet.fleet_id }}">{{ fleet.fleet_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button class="btn btn-success w-100" type="submit">创建司机</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,154 @@
+﻿{% extends "managersystem/base.html" %}
+
+{% block content %}
+<div class="headerdiv text-center">
+    <h1 class="h3 headertext">运单分配</h1>
+    <p class="text-muted mb-0">为待分配运单选择车辆与司机。</p>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-lg-5">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white">
+                <strong>分配运单</strong>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label">待分配运单</label>
+                        <select class="form-select" name="order_id" required>
+                            <option value="">请选择运单</option>
+                            {% for order in pending_orders %}
+                                <option value="{{ order.order_id }}">{{ order.order_id }} - {{ order.destination }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">车辆</label>
+                        <select class="form-select" name="vehicle_plate" required>
+                            <option value="">请选择车辆</option>
+                            {% for vehicle in vehicles %}
+                                <option value="{{ vehicle.plate_number }}">{{ vehicle.plate_number }}（{{ vehicle.status_label }}）</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">司机</label>
+                        <select class="form-select" name="driver_id" required>
+                            <option value="">请选择司机</option>
+                            {% for driver in drivers %}
+                                <option value="{{ driver.driver_id }}">{{ driver.driver_id }} - {{ driver.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button class="btn btn-success w-100" type="submit">提交分配</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-7">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white">
+                <strong>待分配运单列表</strong>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>运单号</th>
+                                <th>目的地</th>
+                                <th class="text-end">重量（吨）</th>
+                                <th class="text-end">体积（立方米）</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for order in pending_orders %}
+                            <tr>
+                                <td>{{ order.order_id }}</td>
+                                <td>{{ order.destination }}</td>
+                                <td class="text-end">{{ order.cargo_weight }}</td>
+                                <td class="text-end">{{ order.cargo_volume }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="4" class="text-muted text-center">暂无待分配运单。</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-white">
+        <strong>全部运单列表</strong>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-sm align-middle table-hover">
+                <thead class="table-light">
+                    <tr>
+                        <th>运单号</th>
+                        <th>目的地</th>
+                        <th>状态</th>
+                        <th>重量</th>
+                        <th>体积</th>
+                        <th>车辆</th>
+                        <th>司机</th>
+                        <th>开始时间</th>
+                        <th>结束时间</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for order in recent_orders %}
+                    <tr class="{{ order.row_class }}">
+                        <td>{{ order.order_id }}</td>
+                        <td>{{ order.destination }}</td>
+                        <td>
+                            <div class="d-flex align-items-center">
+                                <span class="badge bg-secondary text-dark bg-opacity-10 border border-secondary me-2">
+                                    {{ order.status_label }}
+                                </span>
+                                {% if order.status == 'Loading' or order.status == 'In-Transit' %}
+                                <form method="post" class="d-flex align-items-center" style="max-width: 150px;">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="update_status">
+                                    <input type="hidden" name="order_id" value="{{ order.order_id }}">
+                                    <select name="new_status" class="form-select form-select-sm me-1" style="width: auto;">
+                                        <option value="In-Transit" {% if order.status == 'In-Transit' %}selected{% endif %}>运输中</option>
+                                        <option value="Delivered">已完成</option>
+                                    </select>
+                                    <button type="submit" class="btn btn-sm btn-outline-primary px-1 py-0">Ok</button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td>{{ order.cargo_weight }}</td>
+                        <td>{{ order.cargo_volume }}</td>
+                        <td>{{ order.vehicle_plate.plate_number|default:"-" }}</td>
+                        <td>
+                            {% if order.driver %}
+                                {{ order.driver.name }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td>{{ order.start_time|default:"-" }}</td>
+                        <td>{{ order.end_time|default:"-" }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="text-muted text-center">暂无运单记录。</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

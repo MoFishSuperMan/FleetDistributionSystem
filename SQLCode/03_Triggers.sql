@@ -283,5 +283,18 @@ BEGIN
     FROM inserted i
     JOIN deleted d ON i.driver_id = d.driver_id
     WHERE i.license_level <> d.license_level;
+
+    -- 监控 phone 变更 (补充关键信息)
+    INSERT INTO History_Log (table_name, record_key, column_name, old_value, new_value, operator)
+    SELECT 
+        'Driver',
+        i.driver_id,
+        'phone',
+        d.phone,
+        i.phone,
+        'System_Trigger'
+    FROM inserted i
+    JOIN deleted d ON i.driver_id = d.driver_id
+    WHERE i.phone <> d.phone;
 END;
 GO

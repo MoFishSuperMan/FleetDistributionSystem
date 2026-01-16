@@ -58,7 +58,6 @@ class Dispatcher(models.Model):
 class Vehicle(models.Model):
     STATUS_CHOICES = [
         ('Idle', '空闲'),
-        ('Loading', '装货中'),
         ('Busy', '运输中'),
         ('Maintenance', '维修中'),
         ('Exception', '异常'),
@@ -86,6 +85,7 @@ class Vehicle(models.Model):
 class Driver(models.Model):
     driver_id = models.CharField(max_length=20, primary_key=True, verbose_name="司机工号")
     name = models.CharField(max_length=50, verbose_name="姓名")
+    password = models.CharField(max_length=50, verbose_name="密码")
     license_level = models.CharField(max_length=10, verbose_name="驾照等级")
     phone = models.CharField(max_length=20, null=True, blank=True, verbose_name="电话")
     fleet = models.ForeignKey(Fleet, on_delete=models.CASCADE, db_column='fleet_id', verbose_name="所属车队")
@@ -156,3 +156,24 @@ class ExceptionRecord(models.Model):
         managed = False
         verbose_name = "异常记录"
         verbose_name_plural = verbose_name
+
+
+# =============================================
+# 8. 历史日志 (History_Log)
+# =============================================
+class HistoryLog(models.Model):
+    log_id = models.BigAutoField(primary_key=True, verbose_name="日志ID")
+    table_name = models.CharField(max_length=50, verbose_name="表名")
+    record_key = models.CharField(max_length=50, verbose_name="记录主键值")
+    column_name = models.CharField(max_length=50, verbose_name="变更字段名")
+    old_value = models.TextField(blank=True, null=True, verbose_name="旧值")
+    new_value = models.TextField(blank=True, null=True, verbose_name="新值")
+    change_time = models.DateTimeField(db_column='change_time', verbose_name="变更时间")
+    operator = models.CharField(max_length=50, blank=True, null=True, verbose_name="操作人")
+
+    class Meta:
+        db_table = 'History_Log'
+        managed = False
+        verbose_name = "历史日志"
+        verbose_name_plural = verbose_name
+

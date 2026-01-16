@@ -74,9 +74,9 @@
 
 1.  **辖属 (Center-Fleet)**: 1个配送中心下辖 N 个车队 (1:N)。
 2.  **拥有 (Fleet-Vehicle)**: 1个车队拥有 N 辆车 (1:N)。
-3.  **雇佣 (Fleet-Driver)**: 1个车队雇佣 N 名司机 (1:N)。
+3.  **属于 (Fleet-Driver)**: 1个车队雇佣 N 名司机 (1:N)。
 4.  **管理 (Fleet-Dispatcher)**: 1个车队由 1 名主管管理 (1:1)。
-5.  **承运 (Vehicle-Order)**: 1辆车可以承运 N 个运单 (1:N)。
+5.  **运输 (Vehicle-Order)**: 1辆车可以承运 N 个运单 (1:N)。
 6.  **驾驶 (Driver-Order)**: 1名司机负责 N 个运单 (1:N)。
 7.  **涉事车辆 (Exception-Vehicle)**: N 条异常关联 1 辆车 (N:1)。
 8.  **涉事司机 (Exception-Driver)**: N 条异常关联 1 名司机 (N:1)。

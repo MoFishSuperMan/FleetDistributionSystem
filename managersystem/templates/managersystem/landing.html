@@ -1,0 +1,123 @@
+{% extends "managersystem/base.html" %}
+
+{% block content %}
+<div class="headerdiv text-center">
+    <h1 class="h3 headertext">智能物流车队与配送管理平台</h1>
+    <p class="text-muted mb-0">统一管理车队、车辆、司机、运单与异常，提升调度效率与安全水平。</p>
+    <div class="mt-3">
+        <a class="btn btn-primary me-2" href="{% url 'dispatcher_login' %}">
+            <i class="fa fa-user-circle"></i> 部门主管登录
+        </a>
+        <a class="btn btn-outline-primary" href="{% url 'driver_login' %}">
+            <i class="fa fa-id-card"></i> 司机登录
+        </a>
+    </div>
+</div>
+
+{% if stats_error %}
+    <div class="alert alert-warning">{{ stats_error }}</div>
+{% endif %}
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card stat-card hover-card">
+            <div class="card-body">
+                <div class="icon-badge bg-primary"><i class="fa fa-building"></i></div>
+                <p class="text-muted mb-1">配送中心</p>
+                <h4 class="mb-0">{{ stats.centers|default:0 }}</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card hover-card">
+            <div class="card-body">
+                <div class="icon-badge bg-success"><i class="fa fa-truck"></i></div>
+                <p class="text-muted mb-1">车辆规模</p>
+                <h4 class="mb-0">{{ stats.vehicles|default:0 }}</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card hover-card">
+            <div class="card-body">
+                <div class="icon-badge bg-info"><i class="fa fa-users"></i></div>
+                <p class="text-muted mb-1">司机规模</p>
+                <h4 class="mb-0">{{ stats.drivers|default:0 }}</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card hover-card">
+            <div class="card-body">
+                <div class="icon-badge bg-warning"><i class="fa fa-signal"></i></div>
+                <p class="text-muted mb-1">在途/待分配运单</p>
+                <h4 class="mb-0">{{ stats.active_orders|default:0 }}</h4>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card stat-card hover-card">
+            <div class="card-body">
+                <div class="icon-badge bg-secondary"><i class="fa fa-sitemap"></i></div>
+                <p class="text-muted mb-1">车队数量</p>
+                <h4 class="mb-0">{{ stats.fleets|default:0 }}</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card hover-card">
+            <div class="card-body">
+                <div class="icon-badge bg-danger"><i class="fa fa-exclamation-triangle"></i></div>
+                <p class="text-muted mb-1">累计异常</p>
+                <h4 class="mb-0">{{ stats.exceptions|default:0 }}</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card stat-card hover-card">
+            <div class="card-body">
+                <div class="icon-badge bg-dark"><i class="fa fa-bar-chart"></i></div>
+                <p class="text-muted mb-1">累计运单</p>
+                <h4 class="mb-0">{{ stats.orders|default:0 }}</h4>
+                <p class="text-muted mt-2 mb-0">覆盖运单分配、异常处理、绩效报表与资源查询等功能。</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header bg-white">
+                <strong><i class="fa fa-tasks"></i> 任务调度</strong>
+            </div>
+            <div class="card-body">
+                <p class="mb-0">为运单选择合适车辆与司机，自动校验载重与车队归属，确保调度安全合规。</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header bg-white">
+                <strong><i class="fa fa-shield"></i> 异常管理</strong>
+            </div>
+            <div class="card-body">
+                <p class="mb-0">记录运输过程异常，跟踪处理状态，系统自动联动车辆状态与审计记录。</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header bg-white">
+                <strong><i class="fa fa-line-chart"></i> 绩效与报表</strong>
+            </div>
+            <div class="card-body">
+                <p class="mb-0">提供车队月度报表与司机绩效查询，支持多维度统计与安全预警。</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

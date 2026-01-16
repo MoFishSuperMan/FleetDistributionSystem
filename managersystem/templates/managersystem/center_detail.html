@@ -1,0 +1,104 @@
+{% extends "managersystem/base.html" %}
+
+{% block content %}
+<div class="headerdiv text-center mb-4">
+    <h1 class="h3 headertext">{{ center.center_name }} - 车辆负载总览</h1>
+    <p class="text-muted mb-0">{{ center.address }}</p>
+    <a href="{% url 'admin_dashboard' %}" class="btn btn-sm btn-outline-secondary mt-2">
+        <i class="fa fa-arrow-left"></i> 返回配送中心列表
+    </a>
+</div>
+
+<!-- 统计卡片 -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3 col-6">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body text-center">
+                <div class="h2 mb-1 text-primary">{{ stats.total_vehicles }}</div>
+                <small class="text-muted">总车辆数</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body text-center">
+                <div class="h2 mb-1 text-secondary">{{ stats.idle_count }}</div>
+                <small class="text-muted">空闲车辆</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body text-center">
+                <div class="h2 mb-1 text-success">{{ stats.busy_count }}</div>
+                <small class="text-muted">满载/运输中</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body text-center">
+                <div class="h2 mb-1 text-danger">{{ stats.exception_count }}</div>
+                <small class="text-muted">异常车辆</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 车辆列表 -->
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-white">
+        <strong>车辆负载明细</strong>
+        <span class="text-muted small ms-2">
+            (颜色说明: 白色=空闲 | 绿色=满载/运输中 | 红色=异常 | 黄色=维修中)
+        </span>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-sm align-middle table-hover">
+                <thead class="table-light">
+                    <tr>
+                        <th>车牌号</th>
+                        <th>所属车队</th>
+                        <th>调度主管</th>
+                        <th>最大载重(吨)</th>
+                        <th>最大容积(m³)</th>
+                        <th>车辆状态</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for vehicle in vehicles %}
+                    <tr class="{{ vehicle.row_class }}">
+                        <td><strong>{{ vehicle.plate_number }}</strong></td>
+                        <td>{{ vehicle.fleet.fleet_name }}</td>
+                        <td>
+                            {% if vehicle.dispatcher %}
+                                {{ vehicle.dispatcher.name }} ({{ vehicle.dispatcher.dispatcher_id }})
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ vehicle.max_weight }}</td>
+                        <td>{{ vehicle.max_volume }}</td>
+                        <td>
+                            <span class="badge 
+                                {% if vehicle.status == 'Idle' %}bg-secondary{% endif %}
+                                {% if vehicle.status == 'Busy' or vehicle.status == 'Loading' %}bg-success{% endif %}
+                                {% if vehicle.status == 'Exception' %}bg-danger{% endif %}
+                                {% if vehicle.status == 'Maintenance' %}bg-warning text-dark{% endif %}
+                            ">
+                                {{ vehicle.status_label }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="text-center text-muted py-3">该配送中心暂无车辆</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

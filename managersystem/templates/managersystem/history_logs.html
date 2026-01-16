@@ -1,0 +1,67 @@
+{% extends 'managersystem/base.html' %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <h2><i class="bi bi-clock-history"></i> 审计日志</h2>
+        <p class="text-muted">记录关键信息的变更历史（如司机驾照等级、异常记录处理状态）</p>
+    </div>
+</div>
+
+<div class="card shadow">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover table-striped align-middle">
+                <thead class="table-dark">
+                    <tr>
+                        <th>日志ID</th>
+                        <th>表名</th>
+                        <th>记录主键</th>
+                        <th>变更字段</th>
+                        <th>旧值</th>
+                        <th>新值</th>
+                        <th>变更时间</th>
+                        <th>操作人</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in logs %}
+                    <tr>
+                        <td>{{ log.log_id }}</td>
+                        <td>
+                            {% if log.table_name == 'Driver' %}
+                                <span class="badge bg-primary">司机信息</span>
+                            {% elif log.table_name == 'Exception_Record' %}
+                                <span class="badge bg-danger">异常记录</span>
+                            {% else %}
+                                {{ log.table_name }}
+                            {% endif %}
+                        </td>
+                        <td>{{ log.record_key }}</td>
+                        <td>
+                            {% if log.column_name == 'license_level' %}
+                                驾照等级
+                            {% elif log.column_name == 'phone' %}
+                                电话
+                            {% elif log.column_name == 'handle_status' %}
+                                处理状态
+                            {% else %}
+                                {{ log.column_name }}
+                            {% endif %}
+                        </td>
+                        <td class="text-danger">{{ log.old_value }}</td>
+                        <td class="text-success">{{ log.new_value }}</td>
+                        <td>{{ log.change_time|date:"Y-m-d H:i:s" }}</td>
+                        <td>{{ log.operator }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="text-center py-4">暂无审计日志</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

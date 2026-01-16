@@ -1,0 +1,118 @@
+﻿{% extends "managersystem/base.html" %}
+
+{% block content %}
+<div class="headerdiv text-center">
+    <h1 class="h3 headertext">仪表盘</h1>
+    <p class="text-muted mb-0">运营概览与本周异常预警。</p>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm hover-card">
+            <div class="card-body">
+                <p class="text-muted mb-1">车辆总数</p>
+                <h4 class="mb-0">{{ stats.total_vehicles }}</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm hover-card">
+            <div class="card-body">
+                <p class="text-muted mb-1">司机总数</p>
+                <h4 class="mb-0">{{ stats.total_drivers }}</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm hover-card">
+            <div class="card-body">
+                <p class="text-muted mb-1">待分配运单</p>
+                <h4 class="mb-0">{{ stats.pending_orders }}</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm hover-card">
+            <div class="card-body">
+                <p class="text-muted mb-1">未处理异常</p>
+                <h4 class="mb-0">{{ stats.unprocessed_exceptions }}</h4>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white">
+                <strong>车辆状态分布</strong>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-sm table-striped mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>状态</th>
+                            <th class="text-end">数量</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in status_summary %}
+                        <tr>
+                            <td>{{ row.label }}</td>
+                            <td class="text-end">{{ row.total }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="2" class="text-muted text-center">暂无数据</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-8">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white">
+                <strong>本周异常警报（VW_Weekly_Alert）</strong>
+            </div>
+            <div class="card-body">
+                {% if weekly_alert_error %}
+                    <div class="alert alert-warning mb-0">
+                        {{ weekly_alert_error }}
+                    </div>
+                {% else %}
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>车牌号</th>
+                                    <th>车队</th>
+                                    <th>司机</th>
+                                    <th>异常类型</th>
+                                    <th>发生时间</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in weekly_alerts %}
+                                <tr>
+                                    <td>{{ row.plate_number }}</td>
+                                    <td>{{ row.fleet_name }}</td>
+                                    <td>{{ row.driver_name }}</td>
+                                    <td>{{ row.exception_type_label }}</td>
+                                    <td>{{ row.occur_time }}</td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="5" class="text-muted text-center">近 7 天暂无异常记录。</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

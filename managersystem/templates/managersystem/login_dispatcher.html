@@ -1,0 +1,33 @@
+{% extends "managersystem/base.html" %}
+
+{% block content %}
+<div class="headerdiv text-center">
+    <h1 class="h3 headertext">部门主管登录</h1>
+    <p class="text-muted mb-0">仅限车队调度主管使用。</p>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-lg-5">
+        <div class="card">
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label">主管工号</label>
+                        <input type="text" class="form-control" name="dispatcher_id" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">登录密码</label>
+                        <input type="password" class="form-control" name="password" required>
+                    </div>
+                    <button class="btn btn-primary w-100" type="submit">登录</button>
+                </form>
+            </div>
+        </div>
+        <p class="text-muted text-center mt-3 mb-0">
+            司机请使用 <a href="{% url 'driver_login' %}">司机登录</a> |
+            管理员请使用 <a href="{% url 'admin_login' %}">管理员登录</a>
+        </p>
+    </div>
+</div>
+{% endblock %}

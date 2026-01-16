@@ -1,0 +1,179 @@
+﻿{% extends "managersystem/base.html" %}
+
+{% block content %}
+<div class="headerdiv text-center">
+    <h1 class="h3 headertext">我的信息</h1>
+    <p class="text-muted mb-0">仅查看本人相关数据。</p>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header bg-white">
+                <strong>个人资料</strong>
+            </div>
+            <div class="card-body">
+                <p class="mb-2"><strong>工号：</strong>{{ driver.driver_id }}</p>
+                <p class="mb-2"><strong>姓名：</strong>{{ driver.name }}</p>
+                <p class="mb-2"><strong>驾照等级：</strong>{{ driver.license_level }}</p>
+                <p class="mb-2"><strong>联系电话：</strong>{{ driver.phone }}</p>
+                <p class="mb-0"><strong>所属车队：</strong>{{ driver.fleet.fleet_name }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-8">
+        <div class="card h-100">
+            <div class="card-header bg-white">
+                <strong>绩效查询</strong>
+            </div>
+            <div class="card-body">
+                <form class="row g-3 mb-3" method="get">
+                    <div class="col-md-6">
+                        <label class="form-label">开始日期</label>
+                        <input type="date" class="form-control" name="start_date" value="{{ start_date }}" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">结束日期</label>
+                        <input type="date" class="form-control" name="end_date" value="{{ end_date }}" required>
+                    </div>
+                    <div class="col-12">
+                        <button class="btn btn-primary w-100" type="submit">查询绩效</button>
+                    </div>
+                </form>
+
+                {% if performance_error %}
+                    <div class="alert alert-warning mb-0">{{ performance_error }}</div>
+                {% elif performance_summary %}
+                    {% with row=performance_summary.0 %}
+                    <div class="table-responsive mb-3">
+                        <table class="table table-sm align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>司机姓名</th>
+                                    <th>司机工号</th>
+                                    <th class="text-end">完成单数</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>{{ row.name }}</td>
+                                    <td>{{ row.driver_id }}</td>
+                                    <td class="text-end">{{ row.completed_orders_count }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    {% endwith %}
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>记录ID</th>
+                                    <th>发生时间</th>
+                                    <th>异常类型</th>
+                                    <th>具体事件</th>
+                                    <th class="text-end">罚款金额</th>
+                                    <th>处理状态</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in performance_exceptions %}
+                                <tr>
+                                    <td>{{ row.record_id }}</td>
+                                    <td>{{ row.occur_time }}</td>
+                                    <td>{{ row.exception_type }}</td>
+                                    <td>{{ row.specific_event }}</td>
+                                    <td class="text-end">{{ row.fine_amount }}</td>
+                                    <td>{{ row.handle_status }}</td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="6" class="text-muted text-center">该时间段暂无异常记录。</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <p class="text-muted mb-0">请选择日期范围查询绩效。</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header bg-white">
+                <strong>我的运单</strong>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>运单号</th>
+                                <th>状态</th>
+                                <th>车辆</th>
+                                <th>发车时间</th>
+                                <th>签收时间</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for order in orders %}
+                            <tr>
+                                <td>{{ order.order_id }}</td>
+                                <td>{{ order.status_label }}</td>
+                                <td>{{ order.vehicle_plate.plate_number }}</td>
+                                <td>{{ order.start_time }}</td>
+                                <td>{{ order.end_time }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="5" class="text-muted text-center">暂无运单记录。</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header bg-white">
+                <strong>我的异常</strong>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>记录ID</th>
+                                <th>异常类型</th>
+                                <th>处理状态</th>
+                                <th>发生时间</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for record in exceptions %}
+                            <tr>
+                                <td>{{ record.record_id }}</td>
+                                <td>{{ record.exception_type_label }}</td>
+                                <td>{{ record.handle_status_label }}</td>
+                                <td>{{ record.occur_time }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="4" class="text-muted text-center">暂无异常记录。</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -2,22 +2,26 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
-    # 车辆管理
-    path('vehicles/', views.vehicle_list, name='vehicle_list'),
-    path('vehicles/create/', views.vehicle_create, name='vehicle_create'),
-    
-    # 司机管理
-    path('drivers/', views.driver_list, name='driver_list'),
-    path('drivers/create/', views.driver_create, name='driver_create'),
-    
-    # 运单管理
-    path('orders/pending/', views.order_pending_list, name='order_pending'),
-    path('orders/assign/', views.assign_order, name='assign_order'),
-    
-    # 异常管理
-    path('exceptions/create/', views.exception_create, name='exception_create'),
-    
-    # 报表
-    path('reports/fleet_monthly/', views.fleet_monthly_report, name='fleet_monthly_report'),
-    path('reports/driver_performance/', views.driver_performance, name='driver_performance'),
+    # Auth
+    path('', views.landing_page, name='landing'),
+    path('manager/login/', views.admin_login, name='admin_login'),
+    path('dispatcher/login/', views.dispatcher_login, name='dispatcher_login'),
+    path('driver/login/', views.driver_login, name='driver_login'),
+    path('logout/', views.logout, name='logout'),
+
+    # Admin Backend (配送中心管理员)
+    path('manager/dashboard/', views.admin_dashboard, name='admin_dashboard'),
+    path('manager/center/<int:center_id>/', views.center_detail, name='center_detail'),
+
+    # Dispatcher pages
+    path('dashboard/', views.dashboard, name='dashboard'),
+    path('history/', views.history_log_page, name='history_log_page'),
+    path('vehicles/', views.vehicle_page, name='vehicle_page'),
+    path('drivers/', views.driver_page, name='driver_page'),
+    path('orders/', views.order_page, name='order_page'),
+    path('exceptions/', views.exception_page, name='exception_page'),
+    path('reports/', views.report_page, name='report_page'),
+
+    # Driver pages
+    path('driver/center/', views.driver_center, name='driver_center'),
 ]
