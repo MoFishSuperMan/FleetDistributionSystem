@@ -1,10 +1,6 @@
 USE FleetDistributionDB;
 GO
 
--- =============================================
--- 根据 Frame.md 第 2.1 节关系模式 (Relational Schemas) 创建表结构
--- =============================================
-
 -- 1. Distribution_Center (center_id, center_name, address)
 IF OBJECT_ID('Distribution_Center', 'U') IS NOT NULL DROP TABLE Distribution_Center;
 CREATE TABLE Distribution_Center (
@@ -44,7 +40,7 @@ CREATE TABLE Vehicle (
     max_volume DECIMAL(10, 2) NOT NULL,         -- 最大容积
     status NVARCHAR(20) NOT NULL DEFAULT 'Idle',-- 车辆状态
     
-    -- 状态约束：空闲、运输中、维修中、异常
+    -- 状态约束：空闲、运输中、维修中、异常 以及外键
     CONSTRAINT CK_Vehicle_Status CHECK (status IN ('Idle', 'Busy', 'Maintenance', 'Exception')),
     CONSTRAINT FK_Vehicle_Fleet FOREIGN KEY (fleet_id) REFERENCES Fleet(fleet_id)
 );
@@ -63,7 +59,8 @@ CREATE TABLE Driver (
 );
 GO
 
--- 6. Order (Order_id, cargo_weight, cargo_volume, destination, status, vehicle_plate, driver_id, start_time, end_time)
+-- 6. Order (Order_id, cargo_weight, cargo_volume, destination, 
+--          status, vehicle_plate, driver_id, start_time, end_time)
 IF OBJECT_ID('[Order]', 'U') IS NOT NULL DROP TABLE [Order];
 CREATE TABLE [Order] (
     Order_id NVARCHAR(20) PRIMARY KEY,    -- 运单号
@@ -76,14 +73,15 @@ CREATE TABLE [Order] (
     start_time DATETIME,                  -- 发车时间
     end_time DATETIME,                    -- 签收时间
 
-    -- 状态约束依据 condition.txt
+    -- 完整性约束以及外键
     CONSTRAINT CK_Order_Status CHECK (status IN ('Pending', 'Loading', 'In-Transit', 'Delivered')),
     CONSTRAINT FK_Order_Vehicle FOREIGN KEY (vehicle_plate) REFERENCES Vehicle(plate_number),
     CONSTRAINT FK_Order_Driver FOREIGN KEY (driver_id) REFERENCES Driver(driver_id)
 );
 GO
 
--- 7. Exception_Record (record_id, vehicle_plate, driver_id, occur_time, exception_type, specific_event, fine_amount, handle_status, description)
+-- 7. Exception_Record (record_id, vehicle_plate, driver_id, occur_time, 
+--          exception_type, specific_event, fine_amount, handle_status, description)
 IF OBJECT_ID('Exception_Record', 'U') IS NOT NULL DROP TABLE Exception_Record;
 CREATE TABLE Exception_Record (
     record_id BIGINT IDENTITY(1,1) PRIMARY KEY,   -- 记录ID
@@ -96,7 +94,7 @@ CREATE TABLE Exception_Record (
     handle_status NVARCHAR(20) DEFAULT 'Unprocessed', -- 处理状态
     description NVARCHAR(200),                    -- 描述
 
-    -- 类型与状态约束依据 condition.txt
+    -- 完整性约束以及外键
     CONSTRAINT CK_Exception_Type CHECK (exception_type IN ('Transit_Exception', 'Idle_Exception')),
     CONSTRAINT CK_Handle_Status CHECK (handle_status IN ('Unprocessed', 'Processed')),
     CONSTRAINT FK_Exception_Vehicle FOREIGN KEY (vehicle_plate) REFERENCES Vehicle(plate_number),
