@@ -33,7 +33,7 @@ ax.set_yscale('log')
 
 # === 关键修复：设置 Y 轴范围，防止顶部数字被遮挡 ===
 # 这里的 5000 是根据最大值 2005 调整的，给上方留出空间
-ax.set_ylim(1, 5000) 
+ax.set_ylim(1, 8000) 
 
 # 5. 设置图例 (放在右上角，避免遮挡数据)
 ax.legend(loc='upper right', frameon=True, fontsize=10)

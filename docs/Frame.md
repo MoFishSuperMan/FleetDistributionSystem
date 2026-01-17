@@ -322,30 +322,119 @@ $$
     *   **时机**: `Driver` 更新前。
     *   **逻辑**: 监控驾照等级等关键信息变更，记录旧值到 History_Log。
 
-### 3.3 存储过程 (Stored Procedures)
+### 3.3 核心业务逻辑封装：存储过程 (Stored Procedures)
 
-1.  **SP_Calc_Fleet_Monthly_Report**: 计算指定车队、月份的总运单数、异常数、罚款总额。
-2.  **SP_Get_Driver_Performance**: 查询指定司机在特定时间段内的绩效（完成单数）及异常明细。
+为了提高系统性能并保证业务逻辑的一致性，本项目将复杂的聚合计算与多步骤查询封装为存储过程。这种设计有效减少了应用层与数据库之间的网络交互（Round-trips），并将统计口径严格收敛于数据库层。
 
-### 3.4 视图 (Views)
+#### 3.3.1 车队月度运营报表 (`SP_Calc_Fleet_Monthly_Report`)
 
-1.  **VW_Weekly_Alert (本周异常警报)**: 展示最近 7 天发生过异常的车辆和司机，供仪表盘调用。
-2.  **VW_Center_Resource_Status (资源汇总)**: 联表查询 Vehicle-Fleet-Distribution_Center，方便按配送中心层级查看车辆状态。
+**功能描述：**
+该过程用于生成指定车队的月度运营概览，支持管理层进行财务结算与绩效评估。
 
+**实现逻辑与技术细节：**
+1.  **时间边界处理：**
+    输入参数仅需年份与月份信息。内部利用 `DATEFROMPARTS` 构造当月首日，配合 `DATEADD` 计算下月首日，构建 `[Start, End)` 的**左闭右开**时间区间。相比传统的 `BETWEEN` 语法，该方法能精确处理时间部分（Time Component），避免因毫秒精度导致的跨月统计误差。
+2.  **多维聚合计算：**
+    过程内部并行执行三个子查询，分别统计：
+    * **运单量：** 基于 `start_time` 统计该车队车辆承运的任务总数。
+    * **异常频次：** 统计关联车辆发生的 `Exception_Record` 数量。
+    * **罚款总额：** 聚合计算 `fine_amount`，对于 `NULL` 值使用 `ISNULL(..., 0)` 进行清洗，防止计算溢出。
+
+**优势分析：**
+通过一次调用即可返回涵盖运营、合规、财务三个维度的汇总数据，避免了前端多次发起 SQL 请求造成的延迟。
+
+#### 3.3.2 司机绩效与异常透视 (`SP_Get_Driver_Performance`)
+
+**功能描述：**
+为“司机详情页”提供数据支撑，一次性返回司机的核心KPI指标及详细的违规记录。
+
+**实现逻辑与技术细节：**
+本过程采用了**多结果集（Multiple Result Sets）**返回模式：
+1.  **结果集一（KPI 概览）：** 返回司机基本信息及其在指定时间段内状态为 `Delivered` 的完单总数，作为绩效考核基准。
+2.  **结果集二（异常明细）：** 返回该司机的时间轴倒序异常记录（包含类型、罚款及处理状态）。
+
+**设计图解：**
+下面的时序图展示了该存储过程如何将应用层的多次逻辑合并为一次数据库交互。
+
+```mermaid
+sequenceDiagram
+    participant App as 应用层 (Web/API)
+    participant DB as 数据库 (SQL Server)
+
+    Note over App, DB: 传统模式：多次交互
+    App->>DB: Query 1: SELECT Count(*) FROM Orders...
+    DB-->>App: 返回 完单数
+    App->>DB: Query 2: SELECT * FROM Exceptions...
+    DB-->>App: 返回 异常列表
+
+    Note over App, DB: 优化模式：存储过程封装
+    App->>DB: CALL SP_Get_Driver_Performance(DriverID, DateRange)
+    activate DB
+    Note right of DB: 1. 计算绩效 KPI<br/>2. 检索异常明细<br/>3. 打包结果集
+    DB-->>App: 返回 Result Set 1 (绩效) + Result Set 2 (明细)
+    deactivate DB
+```
+### 3.4 数据抽象与展示优化：视图 (Views)
+
+视图层作为物理表与应用层之间的缓冲接口，用于固化高频的联表查询逻辑（Joins）并简化数据结构，使前端开发无需关注底层复杂的实体关系（ER）模型。
+
+#### 3.4.1 实时异常预警看板 (`VW_Weekly_Alert`)
+
+**设计目的：**
+服务于系统首页的“监控仪表盘”，提供最近 7 天内的实时异常数据流。
+
+**逻辑实现：**
+* **时间窗口：** 使用 `DATEADD(DAY, -7, GETDATE())` 动态过滤数据，确保看板仅展示即时高优问题，避免历史数据干扰视线。
+* **容错连接：** 采用 `LEFT JOIN` 关联 `Vehicle`、`Driver` 和 `Fleet` 表。即使某些异常记录关联的车辆或司机已被归档（物理删除），视图仍能保留异常记录本身（Record ID、Type、Event），保证审计数据的完整性。
+
+#### 3.4.2 配送中心资源全景图 (`VW_Center_Resource_Status`)
+
+**设计目的：**
+为区域调度员提供跨层级的资源视图，解决“从配送中心（Center）查到具体车辆（Vehicle）”需要跨越三层表关联的痛点。
+
+**逻辑实现：**
+1.  **层级扁平化：** 将 `Distribution_Center` -> `Fleet` -> `Vehicle` 的三层层级结构展平为一张宽表。
+2.  **计算列（Computed Column）：**
+    引入衍生字段 `availability`。逻辑如下：
+    $$Availability = \begin{cases} \text{'Available'} & \text{if } Status = \text{'Idle'} \\ \text{'Unavailable'} & \text{if } Status \in \{\text{'Busy'}, \text{'Exception'}, \text{'Maintenance'}\} \end{cases}$$
+    这一转换将数据库底层的技术状态码直接转化为业务可读的“可用性”标签，简化了前端的逻辑判断。
+
+**数据血缘图解：**
+该视图将分散的物理表聚合为统一的逻辑视图，如下图所示：
+
+```mermaid
+graph LR
+    subgraph Physical_Tables [物理表层]
+        DC[Distribution_Center]
+        Fleet[Fleet]
+        Veh[Vehicle]
+    end
+
+    subgraph Logic_View [逻辑视图层]
+        View[VW_Center_Resource_Status]
+    end
+
+    DC -->|JOIN center_id| Fleet
+    Fleet -->|JOIN fleet_id| Veh
+    Veh -->|Projection & Calculation| View
+
+    %% 样式定义
+    style View fill:#fff9c4,stroke:#fbc02d,stroke-width:2px
+    style Physical_Tables fill:#e1f5fe,stroke:#01579b,stroke-dasharray: 5 5
+```
 ### 3.5 索引策略 (Indexes)
 
-## 3.5 索引策略与性能优化 (Index Strategy & Performance Tuning)
 
-### 3.5.1 策略制定原则
+#### 3.5.1 策略制定原则
 在本系统的数据库物理设计阶段，索引策略的制定并未盲目追求数量，而是基于**工作负载分析 (Workload Analysis)** 和 **读写平衡 (Read/Write Trade-off)** 原则。考虑到物流配送系统具有“高并发读（车辆调度、状态查询）”和“周期性写（运单生成、位置更新）”的 OLTP（在线事务处理）特性，我们制定了以下核心策略：
 
 1.  **覆盖高频查询路径**：针对 `WHERE` 子句、`JOIN` 连接列以及 `ORDER BY` 排序字段建立索引。
 2.  **利用覆盖索引 (Covering Index)**：通过 `INCLUDE` 包含非键列，消除回表操作 (Key Lookup/Bookmark Lookup)，降低 I/O 开销。
 3.  **外键索引全覆盖**：SQL Server 不会自动为外键创建索引，必须手动建立以避免级联删除/更新时的全表锁，并优化连接性能。
 
-### 3.5.2 详细索引设计与深度优化思路
+#### 3.5.2 详细索引设计与深度优化思路
 
-#### 3.5.2.1 车辆资源调度优化 (Vehicle Resource Optimization)
+##### 3.5.2.1 车辆资源调度优化 (Vehicle Resource Optimization)
 * **索引名称**：`IDX_Vehicle_Status`
 * **目标表**：`Vehicle`
 * **定义**：`ON Vehicle(status) INCLUDE (max_weight, max_volume)`
@@ -354,7 +443,7 @@ $$
     * **解决方案**：建立非聚集索引。由于 `status` 列的**基数 (Cardinality)** 较小（只有 4 种状态），通常选择性不高。但通过将 `status` 作为索引键，并将业务所需的 `max_weight` 和 `max_volume` 作为**包含列 (Included Columns)**，我们构建了一个**覆盖索引**。
     * **性能收益**：查询引擎无需访问主表的数据页（Heap 或 Clustered Index），直接在非聚集索引的叶子节点即可获取所有所需数据。这消除了昂贵的随机 I/O 操作，将查询成本降至最低。
 
-#### 3.5.2.2 时间维度报表优化 (Temporal Reporting Optimization)
+##### 3.5.2.2 时间维度报表优化 (Temporal Reporting Optimization)
 * **索引名称**：`IDX_Order_Date`
 * **目标表**：`[Order]`
 * **定义**：`ON [Order](start_time, end_time)`
@@ -362,7 +451,7 @@ $$
     * **B-Tree 特性利用**：B-Tree 索引是有序存储的。针对 `start_time` 建立索引，使得 `WHERE start_time BETWEEN '2023-01-01' AND '2023-01-31'` 这样的范围查询可以转化为高效的**索引范围扫描 (Index Range Scan)**。
     * **组合索引顺序**：我们将 `start_time` 放在首位，因为报表通常以发车时间作为筛选基准。`end_time` 作为第二键值，有助于计算运输时长（Duration）时的排序和筛选。
 
-#### 3.5.2.3 外键与关联查询优化 (Foreign Key & Join Optimization)
+##### 3.5.2.3 外键与关联查询优化 (Foreign Key & Join Optimization)
 * **索引名称**：`IDX_Order_Vehicle` / `IDX_Exception_Driver`
 * **目标表**：`[Order]`, `Exception_Record`
 * **定义**：针对所有外键列（如 `vehicle_plate`, `driver_id`）建立非聚集索引。
@@ -371,7 +460,7 @@ $$
     * **促进 Nested Loop Join**：建立索引后，优化器更倾向于使用 **Nested Loop Join**，利用索引快速查找匹配行，这对提取单条记录（如“查询司机王某的所有违规”）极其高效。
     * **聚合函数加速**：在 `[Order]` 表的 `vehicle_plate` 索引中，我们额外 `INCLUDE (cargo_weight)`。这样在触发器检查超载时执行 `SUM(cargo_weight)`，数据库只需扫描轻量级的索引页，而无需读取宽大的数据行。
 
-### 3.5.3 索引代价与维护 (Cost & Maintenance)
+#### 3.5.3 索引代价与维护 (Cost & Maintenance)
 
 在享受查询加速的同时，我们也在设计中考量了索引带来的代价：
 
@@ -380,10 +469,6 @@ $$
 * **碎片管理 (Fragmentation)**：由于 `Order_id` 是字符串且可能非顺序插入，易导致页分裂。我们在生产环境建议设置合理的 `FILLFACTOR` (如 90%) 以预留空间减少页分裂。
 
 > 说明：`Dispatcher` 表的登录查询依赖主键 `dispatcher_id`，系统已自动为主键建立聚集索引，因此未额外增加重复索引以避免维护成本。
-
----
-
----
 
 ## 4. 系统实现与测试
 
@@ -420,8 +505,8 @@ $$
     SELECT ... FROM [Order] WHERE start_time >= DATEADD(DAY, -1, GETDATE()) ...
     ```
 * **性能数据**：
-    * [cite_start]**无索引**：逻辑读取 **2005** 页 [cite: 2]。
-    * [cite_start]**有索引** (`IDX_Order_Date`)：逻辑读取 **6** 页 [cite: 5]。
+    * **无索引**：逻辑读取 **2005** 页 。
+    * **有索引** (`IDX_Order_Date`)：逻辑读取 **6** 页 。
 * **分析**：
     性能提升幅度达到 **99.7%**。未建立索引时，数据库执行全表扫描 (Clustered Index Scan)，必须遍历 10 万行数据。建立 B-Tree 索引后，引擎通过索引范围扫描 (Index Range Scan) 直接定位到时间段的起始页，仅读取相关数据页，极大地降低了 I/O 成本。
 
@@ -431,8 +516,8 @@ $$
     SELECT ... FROM [Order] WHERE driver_id = 'DR001' AND status = 'Delivered' ...
     ```
 * **性能数据**：
-    * [cite_start]**无索引**：逻辑读取 **2005** 页 [cite: 3]。
-    * [cite_start]**有索引** (`IDX_Order_Driver` / 复合索引)：逻辑读取 **3** 页 [cite: 6]。
+    * **无索引**：逻辑读取 **2005** 页。
+    * **有索引** (`IDX_Order_Driver` / 复合索引)：逻辑读取 **3** 页。
 * **分析**：
     逻辑读取数从 2005 降至 **3**，这是最显著的优化案例。利用非聚集索引的高选择性，数据库避免了全表扫描，通过 Index Seek 瞬间定位到目标行，实现了毫秒级响应。
 
@@ -442,8 +527,8 @@ $$
     SELECT ... FROM Exception_Record WHERE driver_id = 'DR001' ORDER BY occur_time DESC
     ```
 * **性能数据**：
-    * [cite_start]**无索引**：逻辑读取 **1954** 页，CPU 时间 **15 ms** [cite: 2]。
-    * [cite_start]**有索引** (`IDX_Exception_Driver`)：逻辑读取 **62** 页，CPU 时间 **0 ms** [cite: 6]。
+    ***无索引**：逻辑读取 **1954** 页，CPU 时间 **15 ms** 。
+    ***有索引** (`IDX_Exception_Driver`)：逻辑读取 **62** 页，CPU 时间 **0 ms** 。
 * **分析**：
     I/O 开销降低 **96.8%**，且 CPU 占用降至 0ms。无索引时，数据库需全表扫描并进行内存排序 (Sort Operator)。有索引后，数据本身在索引树中已按键值有序存储（或利用索引辅助排序），消除了昂贵的排序计算开销。
 
@@ -453,8 +538,8 @@ $$
     SELECT ... FROM [Order] WHERE status = 'Pending'
     ```
 * **性能数据**：
-    * [cite_start]**无索引**：逻辑读取 **2005** 页 [cite: 4]。
-    * [cite_start]**有索引** (`IDX_Order_Status`)：逻辑读取 **157** 页 [cite: 7]。
+    * **无索引**：逻辑读取 **2005** 页 。
+    * **有索引** (`IDX_Order_Status`)：逻辑读取 **157** 页 。
 * **分析**：
     读取次数降低约 **92%**。由于历史订单多为 "Delivered"，"Pending" 状态的数据占比较小。索引使得引擎可以跳过绝大多数历史数据，仅精准扫描活跃订单部分。
 
@@ -472,209 +557,171 @@ $$
 
 
 
-### 4.3 技术难点与解决
-*   **难点**: 如何在并发环境下准确计算车辆剩余载重，防止“超卖”。
-*   **解决**: 使用数据库事务（Transaction）配合触发器内的计算逻辑，确保在分配运单时读取到的 CurrentSum 是即时准确的。
+### 4.3 核心技术难点与解决方案：基于触发器的复杂业务逻辑实现
 
+在车队管理系统（Fleet Distribution System）中，数据的一致性与业务规则的自动化执行是后端设计的核心挑战。本项目没有将所有逻辑寄托于应用层代码，而是通过设计高复杂度的数据库触发器（Triggers），在数据存储层实现了“运单分配安全校验”、“车辆状态自动流转”及“异常闭环恢复”三大核心机制。
+
+以下详述本模块遇到的技术难点及具体解决策略。
+
+#### 4.3.1 难点一：动态负载校验与并发一致性
+
+**难点描述：**
+车辆配载是一个动态累加的过程。在分配运单（INSERT）或修改货物信息（UPDATE）时，系统必须实时计算车辆当前的累计载重与体积。传统应用层校验存在“读写时间差”问题，即在并发环境下，两个调度员可能同时向同一辆车分配任务，导致读取到的剩余容量均满足条件，但写入后实际超载。此外，UPDATE操作涉及“扣减旧值、累加新值”的复杂逻辑，处理不当极易导致统计偏差。
+
+**解决方案：基于事务原子性的实时聚合校验 (`TRG_Load_Check`)**
+本方案利用 `AFTER INSERT, UPDATE` 触发器，在数据库事务内部强制执行校验逻辑，利用数据库锁机制确保并发安全。
+
+1.  **动态聚合计算：**
+    触发器不依赖车辆表的静态字段，而是实时扫描 `Order` 表中状态为 `Pending`、`Loading` 及 `In-Transit` 的所有活跃运单，通过 `SUM()` 函数计算当前总负载。
+    $$CurrentWeight = \sum_{i \in ActiveOrders} Weight_i$$
+    该逻辑确保了无论业务层如何操作，数据库底层的物理限制（最大载重/容积）永远不会被突破。
+
+2.  **多维约束检查：**
+    除了物理容量，触发器还集成了业务约束：
+    * **状态约束：** 强制检查车辆状态，仅允许 `Idle`（空闲）状态接受新任务，直接阻断对 `Busy` 或 `Exception` 车辆的非法分配。
+    * **归属约束：** 通过级联查询 `Vehicle` 和 `Driver` 表的 `fleet_id`，强制保证“车队一致性”，防止跨车队违规调度。
+
+#### 4.3.2 难点二：多条件下的车辆状态机自动流转
+
+**难点描述：**
+车辆状态（Idle / Busy / Exception）的流转并非简单的线性关系，而是受控于多张运单的生命周期。
+* **发车锁定：** 单个运单发车（In-Transit）即可锁定车辆为 Busy。
+* **完单释放：** 单个运单送达（Delivered）并不意味着车辆空闲，因为该车可能仍装载着其他未完成的运单。如果逻辑简单处理为“完单即空闲”，将导致严重的状态错误。
+
+**解决方案：基于引用计数的自动状态机 (`TRG_Auto_Status_Update`)**
+我们设计了基于“活跃运单计数”的智能状态回写机制：
+
+1.  **锁定逻辑（正向流转）：**
+    当监测到 `Order` 表状态变更为 `In-Transit` 时，触发器直接将关联车辆状态置为 `Busy`。此处增加了 `WHERE v.status = 'Idle'` 的防御性判断，避免覆盖更高优先级的 `Exception` 状态。
+
+2.  **释放逻辑（逆向流转）：**
+    当运单状态变更为 `Delivered` 时，系统并不直接释放车辆，而是执行一次“全量活跃单检查”：
+    * **Step 1:** 遍历 `inserted` 表中所有完单车辆。
+    * **Step 2:** 查询该车辆名下是否仍存在状态为 `Pending/Loading/In-Transit` 的记录。
+    * **Step 3:** 仅当活跃运单计数（Count）为 **0** 时，才将车辆状态回写为 `Idle`。
+    
+    该设计利用游标（Cursor）遍历批量更新的记录，确保了在批量确认收货场景下，每辆车的状态都能被独立且正确地计算。
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> Idle: 车辆注册
+    
+    state "Idle (空闲)" as Idle
+    state "Busy (繁忙/运输中)" as Busy
+    state "Exception (异常锁定)" as Exception
+
+    Idle --> Busy: 运单发车 (In-Transit)
+    Busy --> Idle: 所有运单完成 (Count=0)
+    
+    Idle --> Exception: 发生异常
+    Busy --> Exception: 发生异常
+    
+    Exception --> Busy: 异常修复 & 仍有运单
+    Exception --> Idle: 异常修复 & 无运单
+```
+
+#### 4.3.3 难点三：异常处理的闭环恢复逻辑
+
+**难点描述：**
+异常管理是物流系统中最复杂的边界情况。
+1.  **发生异常：** 需立即中断业务，无论车辆当前是否由运单，都必须强制锁定。
+2.  **恢复异常：** 当异常记录被置为 `Processed` 时，车辆状态的恢复具有极大的不确定性。车辆可能还有其他未处理的异常（多重故障），或者在修复后仍需继续完成未送达的运单（恢复 Busy），也可能直接回库（恢复 Idle）。
+
+**解决方案：双重检测的智能恢复策略 (`TRG_Exception_Flag` & `TRG_Exception_Recovery`)**
+
+1.  **即时熔断机制：**
+    通过 `TRG_Exception_Flag`，一旦 `Exception_Record` 表有新记录插入，无条件将车辆状态更新为 `Exception`，形成业务熔断，防止受损车辆被继续调度。
+
+2.  **条件恢复算法：**
+    在 `TRG_Exception_Recovery` 中，实现了一套严密的决策树逻辑：
+    * **第一层判空（Check Unprocessed）：** 查询该车是否仍有 `handle_status = 'Unprocessed'` 的记录。若有，维持 `Exception` 状态不变。
+    * **第二层判任务（Check Active Orders）：** 若所有异常均已消除，进一步查询是否存在进行中运单。
+        * 若 `ActiveOrders > 0`：车辆状态恢复为 `Busy`（继续送货）。
+        * 若 `ActiveOrders == 0`：车辆状态恢复为 `Idle`（任务完成，归队）。
+  
+```mermaid
+flowchart TD
+    Start[异常记录状态更新为 Processed] --> Q1{该车是否仍有<br/>未处理异常?}
+    
+    %% 使用管道符 |文字| 来包裹路径文字，避免特殊字符报错
+    Q1 -->|是 True| KeepExc[保持 Exception 状态<br/>等待全部修复]
+    Q1 -->|否 False| Q2{是否存在<br/>进行中运单?}
+    
+    Q2 -->|是 True| RestoreBusy[恢复 Busy 状态<br/>继续运输]
+    Q2 -->|否 False| RestoreIdle[恢复 Idle 状态<br/>归队待命]
+    
+    KeepExc --> End[结束触发器]
+    RestoreBusy --> End
+    RestoreIdle --> End
+    
+    %% 样式定义
+    style Start fill:#e1f5fe,stroke:#01579b
+    style KeepExc fill:#ffcdd2,stroke:#b71c1c
+    style RestoreBusy fill:#fff9c4,stroke:#fbc02d
+    style RestoreIdle fill:#c8e6c9,stroke:#2e7d32
+```
+
+### 总结
+通过上述六个核心触发器的设计，本项目成功将复杂的业务规则下沉至数据库层。这不仅减轻了应用层的代码耦合度，更利用数据库ACID特性，从根本上杜绝了超载、状态冲突和异常流程未闭环等逻辑漏洞，显著提升了系统的鲁棒性。
 ### 4.4 前端技术选型与关键代码
 
-**技术选型与逻辑**
+**技术选型与逻辑（以 `views.py` 为核心的“前端控制层”）**
 
-1. **Django 模板（Server-Side Rendering）**  
-   - **选择原因**：系统以“表单录入 + 列表展示 + 状态更新”为主，页面交互偏管理后台场景，服务端渲染能够直接复用后端权限与数据查询逻辑，减少前后端分离带来的接口与状态同步成本。  
-   - **技术逻辑**：在 `views.py` 中完成数据聚合、权限校验与异常处理，模板只负责展示与少量交互；同时借助 Django 的 `CSRF` 保护与会话机制保证安全性与一致性。  
-   - **适配场景**：运单分配、异常处理、司机/车辆管理等页面都是强“数据表 + 表单”的后台场景，SSR 更易维护。
+1. **Django 视图层（MTV 结构中的 View）**  
+   - **选择原因**：本系统属于管理后台类型，页面以“表单提交 + 列表展示 + 状态更新”为主，前端逻辑更适合由视图函数集中处理。  
+   - **技术逻辑**：在 `views.py` 中完成权限校验、参数解析、数据库读写、错误处理与消息反馈；模板仅负责渲染数据与页面布局。  
+   - **适配场景**：运单分配、异常处理、司机/车辆管理等都是典型的“读写混合 + 多角色权限”场景，集中在 View 层能保证业务一致性。
 
-2. **Bootstrap 5**  
-   - **选择原因**：提供稳定的响应式栅格、表格、表单、导航栏等组件，能快速搭建统一风格的管理界面。  
-   - **技术逻辑**：以 `container`/`row`/`col` 布局为主，结合组件类（如 `card`、`table`、`navbar`、`badge`、`modal`）形成模块化页面结构，保证在不同屏幕尺寸下良好的可读性。
+2. **会话与权限控制**  
+   - **选择原因**：系统区分管理员、调度主管、司机多角色，必须防止越权访问。  
+   - **技术逻辑**：在 `views.py` 中通过 `_ensure_admin/_ensure_dispatcher/_ensure_driver` 进行统一拦截，结合 `request.session.role` 控制访问路径。
 
-3. **模板继承 + 组件化组织**  
-   - **选择原因**：多个页面需要共享导航栏、消息提示、脚本与样式，模板继承可减少重复代码。  
-   - **技术逻辑**：以 `base.html` 作为母版，页面通过 `{% extends %}` 与 `{% block content %}` 渲染主体，保证全站结构一致。
+3. **消息反馈与事务控制**  
+   - **选择原因**：后台操作以创建/更新为主，必须保证操作反馈清晰，且在数据库事务内保证一致性。  
+   - **技术逻辑**：使用 `messages.success/error` 统一提示；更新运单状态与分配使用 `transaction.atomic()` 避免半写入。
 
-4. **轻量 JavaScript 交互**  
-   - **选择原因**：需求以表单与表格交互为主，少量 JS 即可满足“快速选中”“状态更新”等操作，无需引入复杂前端框架。  
-   - **技术逻辑**：在模板中内联简单函数，完成小范围 DOM 操作，避免过度工程化。
+**关键代码示例（来自 `managersystem/views.py`）**
 
-5. **自定义样式（app.css）**  
-   - **选择原因**：在保持 Bootstrap 结构的同时加入品牌视觉（背景、阴影、动画等），增强可读性与交互体验。  
-   - **技术逻辑**：通过 `static` 静态资源加载，并对卡片、表格、按钮等进行轻量化覆盖，形成统一视觉风格。
+1. **角色鉴权与统一入口**  
+   将权限控制前置，避免模板层判断混乱。
 
-**页面结构与交互策略**
-
-- **角色分层**：系统区分管理员、调度主管、司机三类身份。模板根据 `request.session.role` 动态展示菜单项与入口，避免权限混用。  
-- **统一布局**：所有页面共享导航栏、全局提示与内容容器，核心信息均以卡片与表格呈现，降低学习成本。  
-- **数据展示**：统计类页面采用“数字卡片 + 汇总表 + 异常列表”组合，突出关键指标；详情类页面使用分组卡片/表格，保证信息清晰。  
-- **表单流程**：新增/编辑/删除统一采用 `form` 与 `CSRF` 防护，并使用模态框与确认弹窗减少误操作。  
-- **反馈机制**：系统统一使用 Django Messages 输出成功/失败提示，结合 Bootstrap `alert` 样式增强可见性。
-
-**关键代码示例**
-
-1. **统一布局 + 角色导航（`base.html`）**  
-   通过模板继承与会话角色控制菜单项，实现管理员/调度/司机的差异化导航。
-
-```html
-{% load static %}
-<link
-    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
-    rel="stylesheet"
->
-<link rel="stylesheet" href="{% static 'managersystem/css/app.css' %}"><!-- 引入自定义样式 -->
-
-<nav class="navbar navbar-expand-lg navbar-dark bg-dark mynav shadow-sm">
-    <div class="container">
-        <a class="navbar-brand" href="{% url 'dashboard' %}">智能物流车队与配送管理系统</a>
-        <div class="collapse navbar-collapse" id="navbarNav">
-            <div class="navbar-nav">
-                <!-- 根据会话角色切换菜单 -->
-                {% if request.session.role == "dispatcher" %}
-                    <!-- 调度主管功能入口 -->
-                    <a class="nav-link" href="{% url 'vehicle_page' %}">车辆管理</a>
-                    <a class="nav-link" href="{% url 'order_page' %}">运单分配</a>
-                {% elif request.session.role == "driver" %}
-                    <!-- 司机入口 -->
-                    <a class="nav-link" href="{% url 'driver_center' %}">我的信息</a>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-</nav>
+```python
+def _ensure_dispatcher(request):
+    if not request.user.is_authenticated:
+        messages.info(request, "请先登录。")
+        return redirect("dispatcher_login")
+    role = request.session.get("role")
+    if role == "dispatcher":
+        return None
+    if role == "driver":
+        messages.error(request, "当前为司机身份，无法访问该页面。")
+        return redirect("driver_center")
+    return redirect("dispatcher_login")
 ```
 
-2. **全局消息提示（`base.html`）**  
-   统一反馈成功/失败信息，用户无需跳转即可确认操作结果。
+2. **登录与会话写入**  
+   登录成功后写入角色、车队与用户名，后续页面无需重复查询。
 
-```html
-{% if messages %}
-    {% for message in messages %}
-        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
-            {{ message }} <!-- Django Messages 输出 -->
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        </div>
-    {% endfor %}
-{% endif %}
+```python
+def dispatcher_login(request):
+    if request.method == "POST":
+        dispatcher_id = request.POST.get("dispatcher_id", "").strip()
+        password = request.POST.get("password", "").strip()
+        user = authenticate(request, username=dispatcher_id, password=password, role="dispatcher")
+        if user is not None:
+            auth_login(request, user)
+            dispatcher = Dispatcher.objects.get(dispatcher_id=dispatcher_id)
+            request.session["role"] = "dispatcher"   # 写入角色
+            request.session["fleet_id"] = dispatcher.fleet_id  # 绑定车队
+            messages.success(request, "登录成功。")
+            return redirect("dashboard")
+        messages.error(request, "账号或密码错误。")
+    return render(request, "managersystem/login_dispatcher.html")
 ```
 
-3. **统计卡片 + 数据汇总（`dashboard.html`）**  
-   通过卡片显示关键指标，并用表格汇总车辆状态分布，突出“总览”信息。
-
-```html
-<div class="row g-3 mb-4">
-    <div class="col-md-3">
-        <div class="card border-0 shadow-sm hover-card">
-            <div class="card-body">
-                <p class="text-muted mb-1">车辆总数</p>
-                <h4 class="mb-0">{{ stats.total_vehicles }}</h4> <!-- 后端统计值 -->
-            </div>
-        </div>
-    </div>
-</div>
-
-<table class="table table-sm table-striped mb-0">
-    <thead class="table-light">
-        <tr>
-            <th>状态</th>
-            <th class="text-end">数量</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for row in status_summary %}
-        <tr>
-            <td>{{ row.label }}</td>
-            <td class="text-end">{{ row.total }}</td>
-        </tr>
-        {% empty %}
-        <tr>
-            <td colspan="2" class="text-muted text-center">暂无数据</td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
-```
-
-4. **运单分配表单 + 列表联动（`orders.html`）**  
-   以 Bootstrap 表单组件完成分配流程，并用 JS 一键填充运单号，减少人工输入。
-
-```html
-<form method="post">
-    {% csrf_token %}<!-- CSRF 防护 -->
-    <label class="form-label">待分配运单</label>
-    <select class="form-select" name="order_id" id="select-order-id" required>
-        {% for order in pending_orders %}
-            <option value="{{ order.order_id }}">{{ order.order_id }} - {{ order.destination }}</option>
-        {% endfor %}
-    </select>
-    <button class="btn btn-success w-100" type="submit">提交分配</button>
-</form>
-
-<script>
-    function selectOrder(orderId) {
-        const select = document.getElementById('select-order-id');
-        if (select) {
-            select.value = orderId;              // 选中指定运单
-            select.style.backgroundColor = "#e8f0fe"; // 轻量视觉提示
-            setTimeout(() => {
-                select.style.backgroundColor = "";
-            }, 300);
-        }
-    }
-</script>
-```
-
-5. **司机管理：筛选 + 编辑弹窗（`drivers.html`）**  
-   支持按车队筛选司机，编辑动作用模态框完成，减少页面跳转。
-
-```html
-<form class="row g-3 mb-3" method="get">
-    <div class="col-md-6">
-        <label class="form-label">车队</label>
-        <select class="form-select" name="fleet_id">
-            <option value="">全部车队</option>
-            {% for fleet in fleets %}
-                <option value="{{ fleet.fleet_id }}" {% if fleet_filter == fleet.fleet_id|stringformat:"s" %}selected{% endif %}>
-                    {{ fleet.fleet_name }}
-                </option>
-            {% endfor %}
-        </select>
-    </div>
-    <div class="col-md-6 d-flex align-items-end">
-        <button class="btn btn-primary w-100" type="submit">筛选</button>
-    </div>
-</form>
-
-<button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editDriverModal{{ driver.driver_id|slugify }}">
-    <i class="fa fa-edit"></i> 编辑 <!-- 使用 Bootstrap Modal -->
-</button>
-```
-
-6. **异常管理：状态徽标与处理动作（`exceptions.html`）**  
-   通过徽标颜色强调处理状态，并提供“确认处理”按钮。
-
-```html
-<td>
-    {% if record.handle_status == 'Unprocessed' %}
-        <span class="badge bg-danger">未处理</span>
-    {% else %}
-        <span class="badge bg-success">已处理</span>
-    {% endif %}
-</td>
-<td class="text-center">
-    {% if record.handle_status == 'Unprocessed' %}
-    <form method="post" onsubmit="return confirm('确认标记为已处理？');">
-        {% csrf_token %}
-        <input type="hidden" name="action" value="resolve">
-        <input type="hidden" name="record_id" value="{{ record.record_id }}">
-        <button class="btn btn-sm btn-outline-success py-0" type="submit">处理</button>
-    </form>
-    {% else %}
-        -
-    {% endif %}
-</td>
-```
-
-7. **模板渲染的数据准备（`views.py`）**  
-   视图层先做统计与聚合，再交给模板渲染，保证页面逻辑清晰。
+3. **首页统计与视图数据准备**  
+   在 View 层聚合统计数据，模板直接渲染。
 
 ```python
 status_summary = {key: 0 for key in VEHICLE_STATUS_LABELS}
@@ -687,49 +734,56 @@ stats = {
     "pending_orders": Order.objects.filter(status="Pending").count(),
     "unprocessed_exceptions": exception_queryset.filter(handle_status="Unprocessed").count(),
 }
+```
 
-return render(
-    request,
-    "managersystem/dashboard.html",
-    {
-        "status_summary": [
-            {"code": code, "label": label, "total": status_summary.get(code, 0)}
-            for code, label in VEHICLE_STATUS_LABELS.items()
-        ],
-        "stats": stats,
-    },
+4. **运单分配与状态更新（事务控制）**  
+   通过原子事务确保状态更新与时间写入一致。
+
+```python
+if action == "update_status":
+    order_id = request.POST.get("order_id")
+    new_status = request.POST.get("new_status")
+    with transaction.atomic():
+        order = Order.objects.get(order_id=order_id)
+        order.status = new_status
+        if new_status == "Delivered":
+            order.end_time = timezone.now()  # 自动写入完成时间
+        order.save()
+    messages.success(request, f"运单 {order_id} 状态已更新。")
+```
+
+5. **异常管理：处理与创建**  
+   统一入口处理“标记已处理”和“新增异常”，并给出明确提示。
+
+```python
+if action == "resolve":
+    record = ExceptionRecord.objects.get(record_id=record_id)
+    if record.handle_status == "Unprocessed":
+        record.handle_status = "Processed"
+        record.save()
+        messages.success(request, f"异常记录 {record_id} 已处理。")
+
+ExceptionRecord.objects.create(
+    vehicle_plate_id=vehicle_plate,
+    driver_id=driver_id,
+    exception_type=exception_type,
+    fine_amount=fine_amount or 0,
+    handle_status="Unprocessed",
 )
 ```
 
-8. **自定义视觉强化（`static/managersystem/css/app.css`）**  
-   通过背景、动画与卡片阴影强化“管理后台”的层级感与可读性。
+6. **报表查询：调用存储过程**  
+   在 View 层直接调用数据库存储过程，保证统计口径统一。
 
-```css
-body {
-    background-image: url("../images/background.jpg"); /* 背景图营造系统氛围 */
-    background-attachment: fixed;
-}
-
-.mynav .nav-link {
-    color: rgba(255, 255, 255, 0.85); /* 提升暗色导航可读性 */
-    transition: color 0.2s ease, transform 0.2s ease;
-}
-
-.page-animate {
-    animation: fadeInUp 0.6s ease; /* 页面进入动效 */
-}
-
-.card {
-    border-radius: 12px;            /* 卡片圆角增强层次 */
-    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
-}
-
-.hover-card:hover {
-    transform: translateY(-4px);    /* 轻量悬浮反馈 */
-}
+```python
+with connection.cursor() as cursor:
+    cursor.execute("EXEC SP_Calc_Fleet_Monthly_Report %s, %s", [fleet_id, full_date])
+    columns = [col[0] for col in cursor.description]
+    fleet_report = [dict(zip(columns, row)) for row in cursor.fetchall()]
 ```
+“前端控制层”以 `views.py` 为核心，通过会话角色、事务控制、统一消息反馈和存储过程调用，将页面展示、交互与业务规则保持一致，既保证了操作安全，也提升了维护效率。
 
----
+
 
 ## 5. 总结
 
