@@ -595,11 +595,14 @@ def driver_page(request):
             Driver.objects.create(
                 driver_id=driver_id,
                 name=name,
+                password='123456',  # 默认密码
                 license_level=license_level,
                 phone=phone or None,
                 fleet_id=fleet_id,
             )
             messages.success(request, "司机创建成功。")
+            # 重定向到新司机所属车队的筛选页面，确保可以看到新创建的司机
+            return redirect(f"{request.path}?fleet_id={fleet_id}")
         except Exception as exc:
             messages.error(request, f"司机创建失败：{exc}")
         return redirect("driver_page")
