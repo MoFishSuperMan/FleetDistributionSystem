@@ -10,9 +10,97 @@
 
 ---
 
-## 0.5 系统架构
+## 1. 概念结构设计
+
+### 1.1 实体集
+
+根据题目所要求的需求，系统应该有一下的实体：
+
+1.  **配送中心 (Distribution_Center)**
+    物流网络的物理节点，负责管辖车队
+    *   **属性**：
+        *   `center_id` (中心编号): 唯一标识 [PK]
+        *   `center_name` (中心名称): 如“华东一号仓”
+        *   `address` (地址): 物理位置
+2.  **车队 (Fleet)**
+    负责管理车辆与司机
+    *   **属性**：
+        *   `fleet_id` (车队编号): 唯一标识 [PK]
+        *   `fleet_name` (车队名称): 如“干线车队”
+3.  **车辆 (Vehicle)**
+    *   **属性**：
+        *   `plate_number` (车牌号): 唯一标识 [PK]
+        *   `max_weight` (最大载重): 吨
+        *   `max_volume` (最大容积): 立方米
+        *   `status` (车辆状态): 枚举值 (Idle, Loading, Busy, Maintenance, Exception)
+4.  **司机 (Driver)**
+    *   **属性**：
+        *   `driver_id` (工号): 唯一标识 [PK]
+        *   `name` (姓名)
+        *   `license_level` (驾照等级): A1, A2, B1等
+        *   `phone` (联系电话)
+5.  **调度主管 (Dispatcher)**
+    车队负责人，可以录入司机和车辆信息，分配运单，一个车队只有一个主管
+    *   **属性**：
+        *   `dispatcher_id` (工号/账号): 唯一标识 [PK]
+        *   `name` (姓名)
+        *   `password` (登录密码): 用于系统认证
+6.  **运单 (Order)**
+    *   **属性**：
+        *   `Order_id` (运单号): 唯一标识 [PK]
+        *   `cargo_weight` (货物重量)
+        *   `cargo_volume` (货物体积)
+        *   `destination` (目的地)
+        *   `status` (运单状态): Pending, Loading, In-Transit, Delivered
+        *   `start_time` (发车时间)
+        *   `end_time` (签收时间)
+7.  **异常记录 (Exception_Record)**
+    运输、日常中的意外事件记录
+    *   **属性**：
+        *   `record_id` (记录ID): 唯一标识 [PK]
+        *   `occur_time` (发生时间)
+        *   `exception_type` (异常类型): 核心枚举值 (Transit_Exception-运输中异常, Idle_Exception-空闲时异常) —— 决定车辆恢复状态
+        *   `specific_event` (具体事件): 如货物破损、车辆故障、严重延误、超速报警等
+        *   `fine_amount` (罚款金额)
+        *   `handle_status` (处理状态): Unprocessed, Processed
+        *   `description` (描述)
+
+1.  **审计日志 (History_Log)**
+    记录关键数据变更的历史信息，日志系统，使用触发器自动生成
+    *   **属性**：
+        *   `log_id` (日志ID): 唯一标识 [PK]
+        *   `table_name` (来源表名)
+        *   `record_key` (记录主键)
+        *   `column_name` (变更字段)
+        *   `old_value` (旧值)
+        *   `new_value` (新值)
+        *   `change_time` (变更时间)
+        *   `operator` (操作人)
+
+### 1.2 关系集
+
+1.  **辖属 (Center-Fleet)**: 1个配送中心下辖 N 个车队 (1:N)
+2.  **拥有 (Fleet-Vehicle)**: 1个车队拥有 N 辆车 (1:N)
+3.  **属于 (Fleet-Driver)**: 1个车队雇佣 N 名司机 (1:N)
+4.  **管理 (Fleet-Dispatcher)**: 1个车队由 1 名主管管理 (1:1)
+5.  **运输 (Vehicle-Order)**: 1辆车可以承运 N 个运单 (1:N)
+6.  **驾驶 (Driver-Order)**: 1名司机负责 N 个运单 (1:N)
+7.  **涉事车辆 (Exception-Vehicle)**: N 条异常关联 1 辆车 (N:1)
+8.  **涉事司机 (Exception-Driver)**: N 条异常关联 1 名司机 (N:1)
+9.  **审计异常记录 (History_Log-Exception)**: 多条日志记录关联到具体异常记录的具体记录 (N:1)
+10. **审计司机 (History_Log-Driver)**: 多条日志记录关联到具体司机的具体记录 (N:1)
+
+
+### 1.3 E-R 图
+
+![ER Diagram](E-R图.png)
+
+
+## 1.4 用户角色与权限
 
 ### 用户组织架构图
+
+系统设计了三类用户角色：
 
 ```mermaid
 graph TD
@@ -20,21 +108,21 @@ graph TD
 
     %% 分支1：管理员
     UserRoot --> Admin[系统管理员]
-    Admin -->|权限| A1[配送中心/车队管理]
-    Admin -->|权限| A2[全局统计报表]
-    Admin -->|权限| A3[系统审计日志]
+    Admin --> A1[配送中心/车队管理]
+    Admin --> A2[全局统计报表]
+    Admin --> A3[系统审计日志]
 
     %% 分支2：调度主管
     UserRoot --> Dispatcher[调度主管]
-    Dispatcher -->|权限| B1[运单分配调度]
-    Dispatcher -->|权限| B2[车辆司机状态管理]
-    Dispatcher -->|权限| B3[本车队异常处理]
+    Dispatcher --> B1[运单分配调度]
+    Dispatcher --> B2[车辆司机状态管理]
+    Dispatcher --> B3[本车队异常处理]
 
     %% 分支3：司机
     UserRoot --> Driver[司机]
-    Driver -->|权限| C1[查询我的运单]
-    Driver -->|权限| C2[更新运输状态]
-    Driver -->|权限| C3[异常问题上报]
+    Driver --> C1[查询我的运单]
+    Driver --> C2[更新运输状态]
+    Driver --> C3[异常问题上报]
 
     style Admin fill:#f9f,stroke:#333,stroke-width:2px
     style Dispatcher fill:#bbf,stroke:#333,stroke-width:2px
@@ -92,215 +180,232 @@ graph TD
     style C3 fill:#fff,stroke:#333
 ```
 
----
-
-## 1. 概念结构设计
-
-### 1.1 实体集 (Entity Sets)
-
-根据需求分析，本系统包含以下关键实体：
-
-1.  **配送中心 (Distribution_Center)**
-    *   **描述**：物流网络的物理节点，负责管辖车队。
-    *   **属性**：
-        *   `center_id` (中心编号): 唯一标识 [PK]
-        *   `center_name` (中心名称): 如“华东一号仓”
-        *   `address` (地址): 物理位置
-2.  **车队 (Fleet)**
-    *   **描述**：车辆和人员的管理单元。
-    *   **属性**：
-        *   `fleet_id` (车队编号): 唯一标识 [PK]
-        *   `fleet_name` (车队名称): 如“干线车队”
-3.  **车辆 (Vehicle)**
-    *   **描述**：运输工具。
-    *   **属性**：
-        *   `plate_number` (车牌号): 唯一标识 [PK]
-        *   `max_weight` (最大载重): 吨
-        *   `max_volume` (最大容积): 立方米
-        *   `status` (车辆状态): 枚举值 (Idle, Loading, Busy, Maintenance, Exception)
-4.  **司机 (Driver)**
-    *   **描述**：车辆驾驶员。
-    *   **属性**：
-        *   `driver_id` (工号): 唯一标识 [PK]
-        *   `name` (姓名)
-        *   `license_level` (驾照等级): A1, A2, B1等
-        *   `phone` (联系电话)
-5.  **调度主管 (Dispatcher)**
-    *   **描述**：车队负责人，拥有系统登录权限。
-    *   **属性**：
-        *   `dispatcher_id` (工号/账号): 唯一标识 [PK]
-        *   `name` (姓名)
-        *   `password` (登录密码): 用于系统认证
-6.  **运单 (Order)**
-    *   **描述**：物流运输任务单据。
-    *   **属性**：
-        *   `Order_id` (运单号): 唯一标识 [PK]
-        *   `cargo_weight` (货物重量)
-        *   `cargo_volume` (货物体积)
-        *   `destination` (目的地)
-        *   `status` (运单状态): Pending, Loading, In-Transit, Delivered
-        *   `start_time` (发车时间)
-        *   `end_time` (签收时间)
-7.  **异常记录 (Exception_Record)**
-    *   **描述**：运输、日常中的意外事件。
-    *   **属性**：
-        *   `record_id` (记录ID): 唯一标识 [PK]
-        *   `occur_time` (发生时间)
-        *   `exception_type` (异常类型): 核心枚举值 (Transit_Exception-运输中异常, Idle_Exception-空闲时异常) —— 决定车辆恢复状态
-        *   `specific_event` (具体事件): 如货物破损、车辆故障、严重延误、超速报警等
-        *   `fine_amount` (罚款金额)
-        *   `handle_status` (处理状态): Unprocessed, Processed
-        *   `description` (描述)
-
-8.  **审计日志 (History_Log)**
-    *   **描述**：记录关键数据变更的历史信息（系统辅助实体）。
-    *   **属性**：
-        *   `log_id` (日志ID): 唯一标识 [PK]
-        *   `table_name` (来源表名)
-        *   `record_key` (记录主键)
-        *   `column_name` (变更字段)
-        *   `old_value` (旧值)
-        *   `new_value` (新值)
-        *   `change_time` (变更时间)
-        *   `operator` (操作人)
-
-### 1.2 关系集 (Relationship Sets)
-
-1.  **辖属 (Center-Fleet)**: 1个配送中心下辖 N 个车队 (1:N)
-2.  **拥有 (Fleet-Vehicle)**: 1个车队拥有 N 辆车 (1:N)
-3.  **属于 (Fleet-Driver)**: 1个车队雇佣 N 名司机 (1:N)
-4.  **管理 (Fleet-Dispatcher)**: 1个车队由 1 名主管管理 (1:1)
-5.  **运输 (Vehicle-Order)**: 1辆车可以承运 N 个运单 (1:N)
-6.  **驾驶 (Driver-Order)**: 1名司机负责 N 个运单 (1:N)
-7.  **涉事车辆 (Exception-Vehicle)**: N 条异常关联 1 辆车 (N:1)
-8.  **涉事司机 (Exception-Driver)**: N 条异常关联 1 名司机 (N:1)
-
-### 1.3 E-R 图
-
-```mermaid
-erDiagram
-
-    %% 实体定义
-    Distribution_Center {
-        int center_id PK "中心编号"
-        string center_name "中心名称"
-        string address "地址"
-    }
-
-    Fleet {
-        int fleet_id PK "车队编号"
-        string fleet_name "车队名称"
-    }
-
-    Vehicle {
-        string plate_number PK "车牌号"
-        decimal max_weight "最大载重"
-        decimal max_volume "最大容积"
-        enum status "车辆状态(Idle/Busy/Exception...)"
-    }
-
-    Driver {
-        string driver_id PK "司机工号"
-        string name "姓名"
-        enum license_level "驾照等级"
-        string phone "电话"
-    }
-
-    Dispatcher {
-        string dispatcher_id PK "主管工号"
-        string name "姓名"
-        string password "密码"
-    }
-
-    Order {
-        string Order_id PK "运单号"
-        decimal cargo_weight "货物重量"
-        decimal cargo_volume "货物体积"
-        string destination "目的地"
-        enum status "运单状态"
-        datetime start_time "发车时间"
-        datetime end_time "签收时间"
-    }
-
-    Exception_Record {
-        bigint record_id PK "记录ID"
-        datetime occur_time "发生时间"
-        enum exception_type "异常类型"
-        string specific_event "具体事件"
-        decimal fine_amount "罚款金额"
-        enum handle_status "处理状态"
-        string description "描述"
-    }
-
-    %% 关系定义
-    Distribution_Center ||--|{ Fleet : "辖属 (1:N)"
-    Fleet ||--|{ Vehicle : "拥有 (1:N)"
-    Fleet ||--|{ Driver : "雇佣 (1:N)"
-    Fleet ||--|| Dispatcher : "管理 (1:1)"
-    Vehicle ||--|{ Order : "承运 (1:N)"
-    Driver ||--|{ Order : "驾驶 (1:N)"
-    Vehicle ||--|{ Exception_Record : "涉事 (1:N)"
-    Driver ||--|{ Exception_Record : "涉事 (1:N)"
-```
-
-## 1.4 用户角色与权限
-
-系统设计了三类用户角色：
-
-
-
----
 
 ## 2. 逻辑结构设计
 
-### 2.1 关系模式 (Relational Schemas)
+### 2.1 关系模式
 
-将上述 E-R 图转换为关系模式，下划线表示主键，斜体表示外键。
+将上述 E-R 图转换为关系模式，下划线表示主键，双下划线表示外键。
 
 1.  **Distribution_Center** (<u>center_id</u>, center_name, address)
-2.  **Fleet** (<u>fleet_id</u>, fleet_name, *center_id*)
-3.  **Dispatcher** (<u>dispatcher_id</u>, name, password, *fleet_id*)
-4.  **Vehicle** (<u>plate_number</u>, *fleet_id*, max_weight, max_volume, status)
-5.  **Driver** (<u>driver_id</u>, name, license_level, phone, *fleet_id*)
-6.  **Order** (<u>Order_id</u>, cargo_weight, cargo_volume, destination, status, *vehicle_plate*, *driver_id*, start_time, end_time)
-7.  **Exception_Record** (<u>record_id</u>, *vehicle_plate*, *driver_id*, occur_time, exception_type, specific_event, fine_amount, handle_status, description)
+2.  **Fleet** (<u>fleet_id</u>, fleet_name, <span style="text-decoration: underline double;">center_id</span>)
+3.  **Dispatcher** (<u>dispatcher_id</u>, name, password, <span style="text-decoration: underline double;">fleet_id</span>)
+4.  **Vehicle** (<u>plate_number</u>, <span style="text-decoration: underline double;">fleet_id</span>, max_weight, max_volume, status)
+5.  **Driver** (<u>driver_id</u>, name, license_level, phone, <span style="text-decoration: underline double;">fleet_id</span>)
+6.  **Order** (<u>Order_id</u>, cargo_weight, cargo_volume, destination, status, <span style="text-decoration: underline double;">vehicle_plate</span>, <span style="text-decoration: underline double;">driver_id</span>, start_time, end_time)
+7.  **Exception_Record** (<u>record_id</u>, <span style="text-decoration: underline double;">vehicle_plate</span>, <span style="text-decoration: underline double;">driver_id</span>, occur_time, exception_type, specific_event, fine_amount, handle_status, description)
 8.  **History_Log** (<u>log_id</u>, table_name, record_key, column_name, old_value, new_value, change_time, operator)
 
 ### 2.2 规范化分析
 
-我们将证明上述关系模式至少满足 3NF（甚至 BCNF）。
+各个关系模式的函数依赖集如下：
 
-$$
-F = \{ 
-\text{plate\_number} \to \text{fleet\_id}, \quad
-\text{plate\_number} \to \text{max\_weight}, \quad
-\text{plate\_number} \to \text{max\_volume}, \quad
-\text{plate\_number} \to \text{status}, \\
- \}
-$$
+1.  **配送中心表 (Distribution_Center)**
+    $$
+    F = \left\{
+    \begin{aligned}
+    \text{center\_id} \to \text{center\_name}, \text{address}
+    \end{aligned}
+    \right\}
+    $$
 
-**分析示例：Vehicle 表**
-*   **函数依赖集 F**: { `plate_number` -> `fleet_id`, `plate_number` -> `max_weight`, `plate_number` -> `max_volume`, `plate_number` -> `status` }
-*   **分析**: 唯一的候选键是 `plate_number`。F 中所有函数依赖的左部都是候选键。不存在非主属性对码的传递依赖。因此满足 BCNF。
+2.  **车队表 (Fleet)**
+    $$
+    F = \left\{
+    \begin{aligned}
+    \text{fleet\_id} \to \text{fleet\_name}, \text{center\_id}
+    \end{aligned}
+    \right\}
+    $$
 
-**分析示例：Fleet 表**
-*   **函数依赖集 F**: { `fleet_id` -> `fleet_name`, `fleet_id` -> `center_id` }
-*   **分析**: 主键 `fleet_id` 决定所有属性，无传递依赖。满足 BCNF。
+3.  **调度主管表 (Dispatcher)**
+    $$
+    F = \left\{
+    \begin{aligned}
+    \text{dispatcher\_id} \to \text{name}, \text{password}, \text{fleet\_id}
+    \end{aligned}
+    \right\}
+    $$
 
-**结论**: 所有设计的表结构主键明确，非主属性完全依赖于主键，且不存在传递依赖，符合 3NF 设计规范，消除了数据冗余和更新异常。
+4.  **车辆表 (Vehicle)**
+    $$
+    F = \left\{
+    \begin{aligned}
+    \text{plate\_number} \to \text{fleet\_id}, \text{max\_weight}, \text{max\_volume}, \text{status}
+    \end{aligned}
+    \right\}
+    $$
 
----
+5.  **司机表 (Driver)**
+    $$
+    F = \left\{
+    \begin{aligned}
+    \text{driver\_id} \to \text{name}, \text{license\_level}, \text{phone}, \text{fleet\_id}
+    \end{aligned}
+    \right\}
+    $$
+
+6.  **运单表 (Order)**
+    $$
+    F = \left\{
+    \begin{aligned}
+    \text{Order\_id} \to \text{cargo\_weight}, \text{cargo\_volume}, \text{destination}, \text{status}, \\
+    \text{start\_time}, \text{end\_time}, \text{vehicle\_plate}, \text{driver\_id}
+    \end{aligned}
+    \right\}
+    $$
+
+7.  **异常记录表 (Exception_Record)**
+    $$
+    F = \left\{
+    \begin{aligned}
+    \text{record\_id} \to \text{vehicle\_plate}, \text{driver\_id}, \text{occur\_time}, \text{exception\_type}, \\
+    \text{specific\_event}, \text{fine\_amount}, \text{handle\_status}, \text{description}
+    \end{aligned}
+    \right\}
+    $$
+
+8.  **审计日志表 (History_Log)**
+    $$
+    F = \left\{
+    \begin{aligned}
+    \text{log\_id} \to \text{table\_name}, \text{record\_key}, \text{column\_name}, \text{old\_value}, \\
+    \text{new\_value}, \text{change\_time}, \text{operator}
+    \end{aligned}
+    \right\}
+    $$
+
+可以看到上述所有设计关系模式均具有唯一的候选键（即主键）。每一个非平凡函数依赖的左部都包含了候选键，所有非主属性完全依赖于主键，且不存在非主属性对码的传递依赖。因此，**所有关系模式均符合 3NF 及 BCNF 设计规范**，有效消除了数据冗余和潜在的更新异常
+
 
 ## 3. 物理结构与高级对象设计
 
-### 3.1 表结构定义 (Table Definitions)
+### 3.1 表结构定义
 
-采用 MySQL/PostgreSQL 语法进行定义（简略展示）。
+首先在SSMS中创建数据库 `FleetDistributionDB`，并使用以下 SQL 脚本创建各个表结构，定义主键、外键及完整性约束：
 
-*(此处请填入具体的 CREATE TABLE 语句，参考 condition.txt 文档要求和数据库框架.md)*
+```sql
+USE FleetDistributionDB;
+GO
 
-### 3.2 触发器设计 (Triggers)
+-- 1. Distribution_Center (center_id, center_name, address)
+IF OBJECT_ID('Distribution_Center', 'U') IS NOT NULL DROP TABLE Distribution_Center;
+CREATE TABLE Distribution_Center (
+    center_id INT IDENTITY(1,1) PRIMARY KEY, -- 中心编号
+    center_name NVARCHAR(50) NOT NULL,       -- 中心名称
+    address NVARCHAR(100)                    -- 地址
+);
+GO
 
+-- 2. Fleet (fleet_id, fleet_name, center_id)
+IF OBJECT_ID('Fleet', 'U') IS NOT NULL DROP TABLE Fleet;
+CREATE TABLE Fleet (
+    fleet_id INT IDENTITY(1,1) PRIMARY KEY, -- 车队编号
+    fleet_name NVARCHAR(50) NOT NULL,       -- 车队名称
+    center_id INT NOT NULL,                 -- 所属中心
+    CONSTRAINT FK_Fleet_Center FOREIGN KEY (center_id) REFERENCES Distribution_Center(center_id)
+);
+GO
+
+-- 3. Dispatcher (dispatcher_id, name, password, fleet_id)
+IF OBJECT_ID('Dispatcher', 'U') IS NOT NULL DROP TABLE Dispatcher;
+CREATE TABLE Dispatcher (
+    dispatcher_id NVARCHAR(20) PRIMARY KEY, -- 主管工号
+    name NVARCHAR(50) NOT NULL,             -- 姓名
+    password NVARCHAR(50) NOT NULL,         -- 密码
+    fleet_id INT NOT NULL UNIQUE,           -- 所属车队 (1:1 关系)
+    CONSTRAINT FK_Dispatcher_Fleet FOREIGN KEY (fleet_id) REFERENCES Fleet(fleet_id)
+);
+GO
+
+-- 4. Vehicle (plate_number, fleet_id, max_weight, max_volume, status)
+IF OBJECT_ID('Vehicle', 'U') IS NOT NULL DROP TABLE Vehicle;
+CREATE TABLE Vehicle (
+    plate_number NVARCHAR(20) PRIMARY KEY,      -- 车牌号
+    fleet_id INT NOT NULL,                      -- 所属车队
+    max_weight DECIMAL(10, 2) NOT NULL,         -- 最大载重
+    max_volume DECIMAL(10, 2) NOT NULL,         -- 最大容积
+    status NVARCHAR(20) NOT NULL DEFAULT 'Idle',-- 车辆状态
+    
+    -- 状态约束：空闲、运输中、维修中、异常 以及外键
+    CONSTRAINT CK_Vehicle_Status CHECK (status IN ('Idle', 'Busy', 'Maintenance', 'Exception')),
+    CONSTRAINT FK_Vehicle_Fleet FOREIGN KEY (fleet_id) REFERENCES Fleet(fleet_id)
+);
+GO
+
+-- 5. Driver (driver_id, name, license_level, phone, fleet_id)
+IF OBJECT_ID('Driver', 'U') IS NOT NULL DROP TABLE Driver;
+CREATE TABLE Driver (
+    driver_id NVARCHAR(20) PRIMARY KEY,  -- 司机工号
+    name NVARCHAR(50) NOT NULL,          -- 姓名
+    password NVARCHAR(50) NOT NULL DEFAULT '123456', -- 密码 
+    license_level NVARCHAR(10) NOT NULL, -- 驾照等级
+    phone NVARCHAR(20),                  -- 电话
+    fleet_id INT NOT NULL,               -- 所属车队
+    CONSTRAINT FK_Driver_Fleet FOREIGN KEY (fleet_id) REFERENCES Fleet(fleet_id)
+);
+GO
+
+-- 6. Order (Order_id, cargo_weight, cargo_volume, destination, 
+--          status, vehicle_plate, driver_id, start_time, end_time)
+IF OBJECT_ID('[Order]', 'U') IS NOT NULL DROP TABLE [Order];
+CREATE TABLE [Order] (
+    Order_id NVARCHAR(20) PRIMARY KEY,    -- 运单号
+    cargo_weight DECIMAL(10, 2) NOT NULL, -- 货物重量
+    cargo_volume DECIMAL(10, 2) NOT NULL, -- 货物体积
+    destination NVARCHAR(100) NOT NULL,   -- 目的地
+    status NVARCHAR(20) NOT NULL DEFAULT 'Pending', -- 运单状态
+    vehicle_plate NVARCHAR(20),           -- 承运车辆
+    driver_id NVARCHAR(20),               -- 承运司机
+    start_time DATETIME,                  -- 发车时间
+    end_time DATETIME,                    -- 签收时间
+
+    -- 完整性约束以及外键
+    CONSTRAINT CK_Order_Status CHECK (status IN ('Pending', 'Loading', 'In-Transit', 'Delivered')),
+    CONSTRAINT FK_Order_Vehicle FOREIGN KEY (vehicle_plate) REFERENCES Vehicle(plate_number),
+    CONSTRAINT FK_Order_Driver FOREIGN KEY (driver_id) REFERENCES Driver(driver_id)
+);
+GO
+
+-- 7. Exception_Record (record_id, vehicle_plate, driver_id, occur_time, 
+--          exception_type, specific_event, fine_amount, handle_status, description)
+IF OBJECT_ID('Exception_Record', 'U') IS NOT NULL DROP TABLE Exception_Record;
+CREATE TABLE Exception_Record (
+    record_id BIGINT IDENTITY(1,1) PRIMARY KEY,   -- 记录ID
+    vehicle_plate NVARCHAR(20),                   -- 涉事车辆
+    driver_id NVARCHAR(20),                       -- 涉事司机
+    occur_time DATETIME DEFAULT GETDATE(),        -- 发生时间
+    exception_type NVARCHAR(20) NOT NULL,         -- 异常类型
+    specific_event NVARCHAR(50),                  -- 具体事件
+    fine_amount DECIMAL(10, 2) DEFAULT 0,         -- 罚款金额
+    handle_status NVARCHAR(20) DEFAULT 'Unprocessed', -- 处理状态
+    description NVARCHAR(200),                    -- 描述
+
+    -- 完整性约束以及外键
+    CONSTRAINT CK_Exception_Type CHECK (exception_type IN ('Transit_Exception', 'Idle_Exception')),
+    CONSTRAINT CK_Handle_Status CHECK (handle_status IN ('Unprocessed', 'Processed')),
+    CONSTRAINT FK_Exception_Vehicle FOREIGN KEY (vehicle_plate) REFERENCES Vehicle(plate_number),
+    CONSTRAINT FK_Exception_Driver FOREIGN KEY (driver_id) REFERENCES Driver(driver_id)
+);
+GO
+
+-- 8. History_Log (log_id, table_name, record_key, column_name, old_value, new_value, change_time, operator)
+IF OBJECT_ID('History_Log', 'U') IS NOT NULL DROP TABLE History_Log;
+CREATE TABLE History_Log (
+    log_id BIGINT IDENTITY(1,1) PRIMARY KEY, -- 日志ID
+    table_name NVARCHAR(50) NOT NULL,        -- 表名
+    record_key NVARCHAR(50) NOT NULL,        -- 记录主键值
+    column_name NVARCHAR(50) NOT NULL,       -- 变更字段名
+    old_value NVARCHAR(MAX),                 -- 旧值
+    new_value NVARCHAR(MAX),                 -- 新值
+    change_time DATETIME DEFAULT GETDATE(),  -- 变更时间
+    operator NVARCHAR(50)                    -- 操作人
+);
+GO
+
+```
+
+### 3.2 触发器设计
 为了实现业务自动化和数据完整性，系统设计了以下 6 个核心触发器：
 
 1.  **TRG_Load_Check (安全校验)**
