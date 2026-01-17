@@ -14,6 +14,7 @@ from .models import Vehicle, Driver, Order, ExceptionRecord, Fleet, Dispatcher, 
 VEHICLE_STATUS_LABELS = {
     "Idle": "空闲",
     "Busy": "运输中",
+    "Loading": "装货中",
     "Maintenance": "维修中",
     "Exception": "异常",
 }
@@ -275,11 +276,47 @@ def center_detail(request, center_id):
         'exception_count': vehicles.filter(status='Exception').count(),
         'maintenance_count': vehicles.filter(status='Maintenance').count(),
     }
+
+    # 获取车队详细信息用于前端展示 (Grid + Modal)
+    fleets = Fleet.objects.filter(center=center)
+    fleets_data = []
+    for fleet in fleets:
+        # Get dispatcher
+        dispatcher_info = "-"
+        try:
+            if hasattr(fleet, 'dispatcher'):
+                d = fleet.dispatcher
+                dispatcher_info = f"{d.name} ({d.dispatcher_id})"
+        except:
+             pass
+        
+        # Get drivers
+        drivers = Driver.objects.filter(fleet=fleet).values('name', 'driver_id', 'phone', 'license_level')
+        
+        # Get vehicles (simple list for modal)
+        fleet_vehicles = Vehicle.objects.filter(fleet=fleet).values('plate_number', 'status', 'max_weight', 'max_volume')
+        fleet_vehicles_list = []
+        for v in fleet_vehicles:
+            v['status_display'] = VEHICLE_STATUS_LABELS.get(v['status'], v['status'])
+            fleet_vehicles_list.append(v)
+        
+        fleets_data.append({
+            'fleet_id': fleet.fleet_id,
+            'fleet_name': fleet.fleet_name,
+            'dispatcher': dispatcher_info,
+            'drivers': list(drivers),
+            'vehicles': fleet_vehicles_list
+        })
+
+    import json
+    fleets_json = json.dumps(fleets_data, default=str)
     
     return render(request, "managersystem/center_detail.html", {
         'center': center,
         'vehicles': vehicles,
         'stats': stats,
+        'fleets': fleets,
+        'fleets_json': fleets_json,
     })
 
 # =============================================
