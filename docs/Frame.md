@@ -285,9 +285,6 @@ graph TD
 首先在SSMS中创建数据库 `FleetDistributionDB`，并使用以下 SQL 脚本创建各个表结构，定义主键、外键及完整性约束：
 
 ```sql
-USE FleetDistributionDB;
-GO
-
 -- 1. Distribution_Center (center_id, center_name, address)
 IF OBJECT_ID('Distribution_Center', 'U') IS NOT NULL DROP TABLE Distribution_Center;
 CREATE TABLE Distribution_Center (
@@ -296,7 +293,8 @@ CREATE TABLE Distribution_Center (
     address NVARCHAR(100)                    -- 地址
 );
 GO
-
+```
+```sql
 -- 2. Fleet (fleet_id, fleet_name, center_id)
 IF OBJECT_ID('Fleet', 'U') IS NOT NULL DROP TABLE Fleet;
 CREATE TABLE Fleet (
@@ -306,7 +304,8 @@ CREATE TABLE Fleet (
     CONSTRAINT FK_Fleet_Center FOREIGN KEY (center_id) REFERENCES Distribution_Center(center_id)
 );
 GO
-
+```
+```sql
 -- 3. Dispatcher (dispatcher_id, name, password, fleet_id)
 IF OBJECT_ID('Dispatcher', 'U') IS NOT NULL DROP TABLE Dispatcher;
 CREATE TABLE Dispatcher (
@@ -317,7 +316,8 @@ CREATE TABLE Dispatcher (
     CONSTRAINT FK_Dispatcher_Fleet FOREIGN KEY (fleet_id) REFERENCES Fleet(fleet_id)
 );
 GO
-
+```
+```sql
 -- 4. Vehicle (plate_number, fleet_id, max_weight, max_volume, status)
 IF OBJECT_ID('Vehicle', 'U') IS NOT NULL DROP TABLE Vehicle;
 CREATE TABLE Vehicle (
@@ -332,7 +332,8 @@ CREATE TABLE Vehicle (
     CONSTRAINT FK_Vehicle_Fleet FOREIGN KEY (fleet_id) REFERENCES Fleet(fleet_id)
 );
 GO
-
+```
+```sql
 -- 5. Driver (driver_id, name, license_level, phone, fleet_id)
 IF OBJECT_ID('Driver', 'U') IS NOT NULL DROP TABLE Driver;
 CREATE TABLE Driver (
@@ -345,7 +346,8 @@ CREATE TABLE Driver (
     CONSTRAINT FK_Driver_Fleet FOREIGN KEY (fleet_id) REFERENCES Fleet(fleet_id)
 );
 GO
-
+```
+```sql
 -- 6. Order (Order_id, cargo_weight, cargo_volume, destination, 
 --          status, vehicle_plate, driver_id, start_time, end_time)
 IF OBJECT_ID('[Order]', 'U') IS NOT NULL DROP TABLE [Order];
@@ -366,7 +368,8 @@ CREATE TABLE [Order] (
     CONSTRAINT FK_Order_Driver FOREIGN KEY (driver_id) REFERENCES Driver(driver_id)
 );
 GO
-
+```
+```sql
 -- 7. Exception_Record (record_id, vehicle_plate, driver_id, occur_time, 
 --          exception_type, specific_event, fine_amount, handle_status, description)
 IF OBJECT_ID('Exception_Record', 'U') IS NOT NULL DROP TABLE Exception_Record;
@@ -388,7 +391,8 @@ CREATE TABLE Exception_Record (
     CONSTRAINT FK_Exception_Driver FOREIGN KEY (driver_id) REFERENCES Driver(driver_id)
 );
 GO
-
+```
+```sql
 -- 8. History_Log (log_id, table_name, record_key, column_name, old_value, new_value, change_time, operator)
 IF OBJECT_ID('History_Log', 'U') IS NOT NULL DROP TABLE History_Log;
 CREATE TABLE History_Log (
@@ -402,30 +406,348 @@ CREATE TABLE History_Log (
     operator NVARCHAR(50)                    -- 操作人
 );
 GO
-
 ```
 
 ### 3.2 触发器设计
-为了实现业务自动化和数据完整性，系统设计了以下 6 个核心触发器：
+为了实现业务自动化和数据完整性，系统将 6 个核心触发器按照业务逻辑分为以下三类：
 
-1.  **TRG_Load_Check (安全校验)**
-    *   **时机**: `Order` 插入/更新前。
-    *   **逻辑**: 校验车辆剩余载重和容积是否足够（累加该车所有 Status 为 Loading/In-Transit 的运单）。若超载，抛出错误拦截操作。同时校验司机与车辆是否属于同一车队。
-2.  **TRG_Auto_Status_Update (状态流转)**
-    *   **时机**: `Order` 更新后。
-    *   **逻辑**: 当运单状态变为 Delivered，检查车辆是否不再有正在进行的运单。若是，自动将车辆状态置为 Idle。
-3.  **TRG_Exception_Flag (异常标记)**
-    *   **时机**: `Exception_Record` 插入后。
-    *   **逻辑**: 一旦录入异常，立即将关联车辆状态锁定为 Exception。
-4.  **TRG_Exception_Recovery (智能恢复)**
-    *   **时机**: `Exception_Record` 更新后（当 handled_status 变为 Processed）。
-    *   **逻辑**: 检查车辆所有异常是否都已处理。若已全部处理，判断当前是否有未完成运单：有则恢复为 Busy，无则恢复为 Idle。
-5.  **TRG_Exception_Audit (异常审计)**
-    *   **时机**: `Exception_Record` 更新后。
-    *   **逻辑**: 当处理状态变更时，向 History_Log 插入审计记录。
-6.  **TRG_Driver_Update_Audit (司机信息审计)**
-    *   **时机**: `Driver` 更新前。
-    *   **逻辑**: 监控驾照等级等关键信息变更，记录旧值到 History_Log。
+1.  **自动载重校验**
+    **TRG_Load_Check (安全校验)**
+    当向一辆车分配运单时（`Order` 插入/更新前），触发器自动检查该车“当前已分配货物重量 + 新运单重量”是否超过“车辆最大载重”。如果超过，则拒绝插入并抛出错误。同时校验司机与车辆是否属于同一车队。
+    ```sql
+    -- =============================================
+    -- 1. TRG_Load_Check (安全校验 & 状态校验)
+    -- =============================================
+    -- 逻辑：
+    -- 1. 触发时机：INSERT, UPDATE (适配运单分配或信息变更)。
+    -- 2. 状态校验：仅允许非繁忙状态（Idle）的车辆接受任务；禁止分配给 Busy/Exception/Maintenance 状态的车辆。
+    -- 3. 容量校验：动态计算车辆当前剩余载重与容积（未完成运单累加），防止超载。
+    -- 4. 车队校验：确保分配的司机与车辆属于同一车队。
+
+    CREATE TRIGGER TRG_Load_Check
+    ON [Order]
+    AFTER INSERT, UPDATE
+    AS
+    BEGIN
+        -- 仅在车辆分配或货物信息变更时进行校验
+        IF NOT (UPDATE(vehicle_plate) OR UPDATE(driver_id) OR UPDATE(cargo_weight) OR UPDATE(cargo_volume))
+            RETURN;
+
+        DECLARE @VehiclePlate NVARCHAR(20);
+        DECLARE @DriverID NVARCHAR(20);
+        DECLARE @MaxWeight DECIMAL(10, 2);
+        DECLARE @MaxVolume DECIMAL(10, 2);
+        DECLARE @CurrentWeight DECIMAL(10, 2);
+        DECLARE @CurrentVolume DECIMAL(10, 2);
+        DECLARE @VehicleFleetID INT;
+        DECLARE @DriverFleetID INT;
+        DECLARE @VehicleStatus NVARCHAR(20);
+
+        SELECT TOP 1 
+            @VehiclePlate = vehicle_plate, 
+            @DriverID = driver_id
+        FROM inserted
+        WHERE vehicle_plate IS NOT NULL; -- 只校验已分配车辆的记录
+
+        IF @VehiclePlate IS NULL RETURN;
+
+        -- A. 状态校验: 只允许分配 Idle (空闲) 的车辆
+        -- 注意：如果车辆当前是 Idle，但已经有 Loading 状态的运单，我们仍然认为是 Idle 阶段（装货中），允许继续配载。
+        -- 一旦车辆变成 Busy (已发车/运输中)，则禁止再分配。
+        SELECT @VehicleStatus = status FROM Vehicle WHERE plate_number = @VehiclePlate;
+        
+        IF @VehicleStatus IN ('Busy', 'Exception', 'Maintenance')
+        BEGIN
+            RAISERROR ('错误：无法分配运单。车辆当前状态非空闲 (Busy/Exception/Maintenance)。', 16, 1);
+            ROLLBACK TRANSACTION;
+            RETURN;
+        END
+
+        -- B. 车队一致性校验
+        IF @DriverID IS NOT NULL
+        BEGIN
+            SELECT @VehicleFleetID = fleet_id FROM Vehicle WHERE plate_number = @VehiclePlate;
+            SELECT @DriverFleetID = fleet_id FROM Driver WHERE driver_id = @DriverID;
+
+            IF @VehicleFleetID <> @DriverFleetID
+            BEGIN
+                RAISERROR ('错误：司机与车辆必须属于同一车队。', 16, 1);
+                ROLLBACK TRANSACTION;
+                RETURN;
+            END
+        END
+
+        -- C. 载重与容积校验
+        SELECT 
+            @MaxWeight = max_weight, 
+            @MaxVolume = max_volume 
+        FROM Vehicle 
+        WHERE plate_number = @VehiclePlate;
+
+        -- 计算该车辆当前所有未完成运单的总重/总体积 (状态不为 Delivered)
+        -- 注意：AFTER TRIGGER，inserted 中的数据已存在于表中，直接 SUM 即可
+        SELECT 
+            @CurrentWeight = ISNULL(SUM(cargo_weight), 0),
+            @CurrentVolume = ISNULL(SUM(cargo_volume), 0)
+        FROM [Order]
+        WHERE vehicle_plate = @VehiclePlate 
+        AND status IN ('Pending', 'Loading', 'In-Transit');
+
+        IF (@CurrentWeight > @MaxWeight)
+        BEGIN
+            RAISERROR ('错误：车辆超载！(当前总重超过最大载重)', 16, 1);
+            ROLLBACK TRANSACTION;
+            RETURN;
+        END
+
+        IF (@CurrentVolume > @MaxVolume)
+        BEGIN
+            RAISERROR ('错误：车辆容积不足！', 16, 1);
+            ROLLBACK TRANSACTION;
+            RETURN;
+        END
+    END;
+    GO
+    ```
+
+2.  **车辆状态自动流转**
+    **TRG_Auto_Status_Update (完单释放)**
+    一辆车完成所有运单的签收（`Order` 更新后，运单状态全部变为“已完成”），触发器自动将车辆状态从“运输中”更新为“空闲”。
+    ```sql
+    -- =============================================
+    -- 2. TRG_Auto_Status_Update (车辆状态自动流转)
+    -- =============================================
+    -- 逻辑：
+    -- 1. 发车自动锁定：当运单状态更新为 'In-Transit' (运输中) 时，若车辆为空闲状态，自动变更为 'Busy' (繁忙)。
+    -- 2. 完单自动释放：当运单状态更新为 'Delivered' (已送达) 时，检查车辆是否不再有未完成的活跃运单。若无，则自动恢复为 'Idle' (空闲)。
+    IF OBJECT_ID('TRG_Auto_Status_Update', 'TR') IS NOT NULL DROP TRIGGER TRG_Auto_Status_Update;
+    GO
+
+    CREATE TRIGGER TRG_Auto_Status_Update
+    ON [Order]
+    AFTER UPDATE
+    AS
+    BEGIN
+        SET NOCOUNT ON;
+
+        IF NOT UPDATE(status) RETURN;
+
+        -- 场景 1: 运单状态变更为 In-Transit (运输中) -> 车辆变为 Busy
+        -- 只有当车辆当前是 Idle 时才更新，避免覆盖 Exception 等状态
+        UPDATE v
+        SET v.status = 'Busy'
+        FROM Vehicle v
+        JOIN inserted i ON v.plate_number = i.vehicle_plate
+        WHERE i.status = 'In-Transit'
+        AND v.status = 'Idle';
+
+        -- 场景 2: 运单状态变更为 Delivered (已送达) -> 检查是否释放车辆
+        DECLARE @VehiclePlate NVARCHAR(20);
+        DECLARE @ActiveOrdersCount INT;
+
+        -- 遍历所有状态变为 Delivered 的车辆
+        DECLARE cur CURSOR FOR
+        SELECT DISTINCT i.vehicle_plate
+        FROM inserted i
+        JOIN deleted d ON i.Order_id = d.Order_id
+        WHERE i.status = 'Delivered' AND d.status <> 'Delivered' AND i.vehicle_plate IS NOT NULL;
+
+        OPEN cur;
+        FETCH NEXT FROM cur INTO @VehiclePlate;
+
+        WHILE @@FETCH_STATUS = 0
+        BEGIN
+            -- 检查该车辆是否还有未完成的运单 (Pending, Loading, In-Transit)
+            SELECT @ActiveOrdersCount = COUNT(*)
+            FROM [Order]
+            WHERE vehicle_plate = @VehiclePlate 
+            AND status IN ('Pending', 'Loading', 'In-Transit');
+
+            -- 如果没有活跃运单，且车辆当前是 Busy (或 Loading)，则恢复为 Idle
+            -- 注意不覆盖 Exception/Maintenance
+            IF @ActiveOrdersCount = 0
+            BEGIN
+                UPDATE Vehicle
+                SET status = 'Idle'
+                WHERE plate_number = @VehiclePlate 
+                AND status IN ('Busy');
+            END
+
+            FETCH NEXT FROM cur INTO @VehiclePlate;
+        END
+
+        CLOSE cur;
+        DEALLOCATE cur;
+    END;
+    GO
+    ```
+    **TRG_Exception_Flag (异常锁定)** 
+    当录入异常时，立即将车辆状态锁定为 `Exception`。
+    ```sql
+    -- =============================================
+    -- 3. TRG_Exception_Flag (异常标记)
+    -- =============================================
+    -- 逻辑：一旦录入异常，立即将关联车辆状态锁定为 Exception。
+    IF OBJECT_ID('TRG_Exception_Flag', 'TR') IS NOT NULL DROP TRIGGER TRG_Exception_Flag;
+    GO
+
+    CREATE TRIGGER TRG_Exception_Flag
+    ON Exception_Record
+    AFTER INSERT
+    AS
+    BEGIN
+        SET NOCOUNT ON;
+
+        UPDATE v
+        SET v.status = 'Exception'
+        FROM Vehicle v
+        JOIN inserted i ON v.plate_number = i.vehicle_plate
+        WHERE i.vehicle_plate IS NOT NULL;
+    END;
+    GO
+    ```
+    **TRG_Exception_Recovery (智能恢复)**
+    当一辆处于异常状态的车的所有异常处理完成后（`Exception_Record` 更新），触发器自动判断当前是否有未完成运单：有则恢复为 `Busy`，无则恢复为 `Idle`
+    ```sql
+    -- =============================================
+    -- 4. TRG_Exception_Recovery (智能恢复)
+    -- =============================================
+    -- 逻辑：当异常记录更新为 Processed，检查车辆是否所有异常都处理完毕。
+    IF OBJECT_ID('TRG_Exception_Recovery', 'TR') IS NOT NULL DROP TRIGGER TRG_Exception_Recovery;
+    GO
+
+    CREATE TRIGGER TRG_Exception_Recovery
+    ON Exception_Record
+    AFTER UPDATE
+    AS
+    BEGIN
+        SET NOCOUNT ON;
+        
+        -- 只关注处理状态变更
+        IF NOT UPDATE(handle_status) RETURN;
+
+        DECLARE @VehiclePlate NVARCHAR(20);
+        DECLARE @UnprocessedCount INT;
+        DECLARE @ActiveOrdersCount INT;
+
+        DECLARE cur CURSOR FOR
+        SELECT DISTINCT i.vehicle_plate
+        FROM inserted i
+        WHERE i.handle_status = 'Processed' AND i.vehicle_plate IS NOT NULL;
+
+        OPEN cur;
+        FETCH NEXT FROM cur INTO @VehiclePlate;
+
+        WHILE @@FETCH_STATUS = 0
+        BEGIN
+            -- 检查该车是否还有未处理的异常
+            SELECT @UnprocessedCount = COUNT(*)
+            FROM Exception_Record
+            WHERE vehicle_plate = @VehiclePlate AND handle_status = 'Unprocessed';
+
+            IF @UnprocessedCount = 0
+            BEGIN
+                -- 既然没有异常了，判断应该恢复成什么状态
+                SELECT @ActiveOrdersCount = COUNT(*)
+                FROM [Order]
+                WHERE vehicle_plate = @VehiclePlate AND status IN ('Pending', 'Loading', 'In-Transit');
+
+                IF @ActiveOrdersCount > 0
+                    UPDATE Vehicle SET status = 'Busy' WHERE plate_number = @VehiclePlate;
+                ELSE
+                    UPDATE Vehicle SET status = 'Idle' WHERE plate_number = @VehiclePlate;
+            END
+
+            FETCH NEXT FROM cur INTO @VehiclePlate;
+        END
+
+        CLOSE cur;
+        DEALLOCATE cur;
+    END;
+    GO
+    ```
+
+3.  **审计日志**
+    **TRG_Driver_Update_Audit (司机信息审计)**
+    当修改司机的关键信息（如驾照等级）时，触发器自动将旧数据写入 `History_Log` 表中进行备份
+    ```sql
+    -- =============================================
+    -- 6. TRG_Driver_Update_Audit (司机信息审计)
+    -- =============================================
+    -- 逻辑：监控驾照等级等关键信息变更，记录旧值到 History_Log。
+
+    CREATE TRIGGER TRG_Driver_Update_Audit
+    ON Driver
+    AFTER UPDATE
+    AS
+    BEGIN
+        SET NOCOUNT ON;
+
+        DECLARE @Operator NVARCHAR(50);
+        -- 从CONTEXT_INFO读取操作人，如果没有设置则使用System_Trigger
+        SELECT @Operator = ISNULL(CAST(CONTEXT_INFO() AS NVARCHAR(50)), 'System_Trigger');
+        IF @Operator = '' SET @Operator = 'System_Trigger';
+
+        -- 监控 license_level 变更
+        INSERT INTO History_Log (table_name, record_key, column_name, old_value, new_value, operator)
+        SELECT 
+            'Driver',
+            i.driver_id,
+            'license_level',
+            d.license_level,
+            i.license_level,
+            @Operator
+        FROM inserted i
+        JOIN deleted d ON i.driver_id = d.driver_id
+        WHERE i.license_level <> d.license_level;
+
+        -- 监控 phone 变更 (补充关键信息，注意NULL值处理)
+        INSERT INTO History_Log (table_name, record_key, column_name, old_value, new_value, operator)
+        SELECT 
+            'Driver',
+            i.driver_id,
+            'phone',
+            ISNULL(d.phone, 'NULL'),
+            ISNULL(i.phone, 'NULL'),
+            @Operator
+        FROM inserted i
+        JOIN deleted d ON i.driver_id = d.driver_id
+        WHERE ISNULL(i.phone, '') <> ISNULL(d.phone, '');
+    END;
+    ```
+
+    **TRG_Exception_Audit (异常处理审计)**
+    当异常记录被处理（状态变更）时，触发器自动记录操作人与处理时间到审计日志表
+    ```sql
+    -- =============================================
+    -- 5. TRG_Exception_Audit (异常审计)
+    -- =============================================
+    -- 逻辑：当处理状态变更时，向 History_Log 插入审计记录。
+
+    CREATE TRIGGER TRG_Exception_Audit
+    ON Exception_Record
+    AFTER UPDATE
+    AS
+    BEGIN
+        SET NOCOUNT ON;
+
+        DECLARE @Operator NVARCHAR(50);
+        SELECT @Operator = ISNULL(CAST(CONTEXT_INFO() AS NVARCHAR(50)), 'System_Trigger');
+        IF @Operator = '' SET @Operator = 'System_Trigger';
+
+        INSERT INTO History_Log (table_name, record_key, column_name, old_value, new_value, operator)
+        SELECT 
+            'Exception_Record',
+            CAST(i.record_id AS NVARCHAR(50)),
+            'handle_status',
+            d.handle_status,
+            i.handle_status,
+            @Operator
+        FROM inserted i
+        JOIN deleted d ON i.record_id = d.record_id
+        WHERE i.handle_status <> d.handle_status;
+    END;
+    ```
 
 ### 3.3 核心业务逻辑封装：存储过程 (Stored Procedures)
 
@@ -578,18 +900,111 @@ graph LR
 ## 4. 系统实现与测试
 
 ### 4.1 开发环境
-*   **Operating System**: Windows
-*   **Database**: Microsoft SQL Server 2019 
-*   **IDE**: SQL Server Management Studio (SSMS)
-*   **编程语言**: Python 3.10
-*   **Web Framework**: Django 4.2
-*   **前端框架**: Bootstrap 5
+*   操作系统: Windows
+*   数据库: Microsoft SQL Server 2019 
+*   数据库开发软件: SQL Server Management Studio (SSMS)
+*   后端编程语言: Python 3.10
+*   Web 应用框架: Django 4.2
+*   前端框架: Bootstrap 5
 
 ### 4.2 关键功能展示
-*(此处插入关键功能的运行截图)*
-*   图1：超载触发器拦截报错截图。
-*   图2：运单分配与车辆状态自动变更截图。
-*   图3：异常录入与车辆锁定截图。
+
+#### 4.2.1 司机、车辆基础信息录入管理
+
+司机录入功能，可以看到在填好信息之后，点击提交按钮，信息会被存入数据库中，同时也会在左边进行显示
+<div>
+<center>
+<img src="asserts/image-31.png" width="49%"/>
+<img src="asserts/image-32.png" width="49%"/>
+</center>
+</div>
+
+<div>
+<center>
+<img src="asserts/image-33.png" width="49%"/>
+<img src="asserts/image-34.png" width="49%"/>
+</center>
+</div>
+
+#### 4.2.2 运单分配以及自动载重校验
+
+在运单分配模块中，主管可以对订单进行分配。分配过程中，系统会通过触发器机制，检查车辆的状态（如是否空闲、是否超载），如果超载了会进行相应的报错提示，确保每一次分配都符合业务规则，如下图所示：
+<div>
+<center>
+<img src="asserts/image-10.png" width="49%" />
+<img src="asserts/image-11.png" width="49%" />
+<img src="asserts/image-12.png" width="49%" />
+<img src="asserts/image-13.png" width="49%" />
+</center>
+</div>
+
+#### 4.2.3 异常记录录入
+
+在异常管理模块中，主管可以录入异常信息
+
+<img src="asserts/image-15.png" width="49%" />
+<img src="asserts/image-16.png" width="49%" />
+
+#### 4.2.4 车队资源查询
+
+在数据库管理员权限登录下，可以查看到所有配送中心的情况，然后点击'查看详情'可以查询某个配送中心下所有车队的车辆负载情况
+
+<img src="asserts/image-26.png" width="49%" />
+<img src="asserts/image-27.png" width="49%" />
+
+
+#### 4.2.5 司机绩效追踪与统计报表
+
+在统计报表页面，主管可以选择不同的时间范围来查看查询某名司机在特定时间段内的运输单数及产生的异常记录详情以及某个车队在某个月度的“安全与效率报表”，包含：总运单数、异常事件总数、累计罚款金额
+
+<img src="asserts/image-30.png" width="49%" />
+
+
+#### 4.2.6 车辆状态流转
+
+当运单被分配后，车辆状态会自动从“空闲”变更为“运输中”；当运输完成后，车辆状态会自动变更为“维修中”或“空闲”，如下图所示：
+
+<img src="asserts/image-13.png" width="49%" />
+<img src="asserts/image-20.png" width="49%" />
+
+<img src="asserts/image-23.png" width="49%" />
+<img src="asserts/image-25.png" width="49%" />
+
+当运输过程中录入异常后，车辆状态会自动变更为“异常”，然后当异常处理完成之后，，触发器自动根据异常类型将车辆状态从“异常”更新为“空闲”或“运输中”，如下图所示：
+
+<img src="asserts/image-16.png" width="49%" />
+<img src="asserts/image-17.png" width="49%" />
+
+<img src="asserts/image-18.png" width="49%" />
+<img src="asserts/image-20.png" width="49%" />
+
+
+#### 4.2.7 审计日志
+
+当修改司机的关键信息以及异常记录被处理时，触发器自动将旧数据写入 History_Log 表中进行备份：
+
+<img src="asserts/image-7.png" width="49%" />
+<img src="asserts/image-9.png" width="49%" />
+
+
+<img src="asserts/image-16.png" width="49%" />
+<img src="asserts/image-21.png" width="49%" />
+
+#### 4.2.8 用户权限的分离以及系统总览
+
+系统的总览首页如下，它显示了系统的基本信息以及各个模块的入口
+![alt text](asserts/image.png)
+
+然后系统有三种用户权限：数据库管理员、主管和司机，不同权限登录后看到的界面不同，功能也不同：
+
+<img src="asserts/image-1.png" width="49%" />
+<img src="asserts/image-4.png" width="49%" />
+
+<img src="asserts/image-2.png" width="49%" />
+<img src="asserts/image-26.png" width="49%" />
+
+<img src="asserts/image-3.png" width="49%" />
+<img src="asserts/image-22.png" width="49%" />
 
 
 #### 4.2.n 索引性能验证与分析 (Index Performance Verification)
@@ -664,7 +1079,7 @@ graph LR
 
 ### 4.3 核心技术难点与解决方案：基于触发器的复杂业务逻辑实现
 
-在车队管理系统（Fleet Distribution System）中，数据的一致性与业务规则的自动化执行是后端设计的核心挑战。本项目没有将所有逻辑寄托于应用层代码，而是通过设计高复杂度的数据库触发器（Triggers），在数据存储层实现了“运单分配安全校验”、“车辆状态自动流转”及“异常闭环恢复”三大核心机制。
+在车队管理系统中，数据的一致性与业务规则的自动化执行是后端设计的核心挑战。本项目没有将所有逻辑寄托于应用层代码，而是通过设计高复杂度的数据库触发器（Triggers），在数据存储层实现了“运单分配安全校验”、“车辆状态自动流转”及“异常闭环恢复”三大核心机制。
 
 以下详述本模块遇到的技术难点及具体解决策略。
 
