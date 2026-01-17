@@ -29,12 +29,12 @@
                     <a class="nav-link" href="{% url 'admin_dashboard' %}">配送中心总览</a>
                 {% elif request.session.role == "dispatcher" %}
                     {# 车队主管菜单 #}
-                    <a class="nav-link" href="{% url 'dashboard' %}">仪表盘</a>
+                    <a class="nav-link" href="{% url 'dashboard' %}">车队总览</a>
                     <a class="nav-link" href="{% url 'vehicle_page' %}">车辆管理</a>
                     <a class="nav-link" href="{% url 'driver_page' %}">司机管理</a>
                     <a class="nav-link" href="{% url 'order_page' %}">运单分配</a>
                     <a class="nav-link" href="{% url 'exception_page' %}">异常管理</a>
-                    <a class="nav-link" href="{% url 'report_page' %}">报表查询</a>
+                    <a class="nav-link" href="{% url 'report_page' %}">统计报表</a>
                     <a class="nav-link" href="{% url 'history_log_page' %}">审计日志</a>
                 {% elif request.session.role == "driver" %}
                     {# 司机菜单 #}
@@ -48,7 +48,7 @@
                     <span class="navbar-text text-white me-3">
                         当前身份：
                         {% if request.session.role == "admin" %}系统管理员
-                        {% elif request.session.role == "dispatcher" %}部门主管
+                        {% elif request.session.role == "dispatcher" %}调度主管
                         {% else %}司机
                         {% endif %}
                         - {{ request.session.user_name }}
@@ -56,7 +56,7 @@
                     <a class="nav-link" href="{% url 'logout' %}">退出</a>
                 {% else %}
                     <a class="nav-link" href="{% url 'admin_login' %}">管理员登录</a>
-                    <a class="nav-link" href="{% url 'dispatcher_login' %}">部门主管登录</a>
+                    <a class="nav-link" href="{% url 'dispatcher_login' %}">调度主管登录</a>
                     <a class="nav-link" href="{% url 'driver_login' %}">司机登录</a>
                 {% endif %}
             </div>
@@ -82,5 +82,7 @@
     integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
     crossorigin="anonymous"
 ></script>
+
+{% block extra_js %}{% endblock %}
 </body>
 </html>

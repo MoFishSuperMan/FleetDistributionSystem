@@ -68,18 +68,28 @@
         *   `handle_status` (处理状态): Unprocessed, Processed
         *   `description` (描述)
 
-*注：审计日志 (History_Log) 属于系统辅助表，通常不体现在业务概念模型的E-R图中，但在物理设计中会体现。*
+8.  **审计日志 (History_Log)**
+    *   **描述**：记录关键数据变更的历史信息（系统辅助实体）。
+    *   **属性**：
+        *   `log_id` (日志ID): 唯一标识 [PK]
+        *   `table_name` (来源表名)
+        *   `record_key` (记录主键)
+        *   `column_name` (变更字段)
+        *   `old_value` (旧值)
+        *   `new_value` (新值)
+        *   `change_time` (变更时间)
+        *   `operator` (操作人)
 
 ### 1.2 关系集 (Relationship Sets)
 
-1.  **辖属 (Center-Fleet)**: 1个配送中心下辖 N 个车队 (1:N)。
-2.  **拥有 (Fleet-Vehicle)**: 1个车队拥有 N 辆车 (1:N)。
-3.  **属于 (Fleet-Driver)**: 1个车队雇佣 N 名司机 (1:N)。
-4.  **管理 (Fleet-Dispatcher)**: 1个车队由 1 名主管管理 (1:1)。
-5.  **运输 (Vehicle-Order)**: 1辆车可以承运 N 个运单 (1:N)。
-6.  **驾驶 (Driver-Order)**: 1名司机负责 N 个运单 (1:N)。
-7.  **涉事车辆 (Exception-Vehicle)**: N 条异常关联 1 辆车 (N:1)。
-8.  **涉事司机 (Exception-Driver)**: N 条异常关联 1 名司机 (N:1)。
+1.  **辖属 (Center-Fleet)**: 1个配送中心下辖 N 个车队 (1:N)
+2.  **拥有 (Fleet-Vehicle)**: 1个车队拥有 N 辆车 (1:N)
+3.  **属于 (Fleet-Driver)**: 1个车队雇佣 N 名司机 (1:N)
+4.  **管理 (Fleet-Dispatcher)**: 1个车队由 1 名主管管理 (1:1)
+5.  **运输 (Vehicle-Order)**: 1辆车可以承运 N 个运单 (1:N)
+6.  **驾驶 (Driver-Order)**: 1名司机负责 N 个运单 (1:N)
+7.  **涉事车辆 (Exception-Vehicle)**: N 条异常关联 1 辆车 (N:1)
+8.  **涉事司机 (Exception-Driver)**: N 条异常关联 1 名司机 (N:1)
 
 ### 1.3 E-R 图
 
@@ -244,10 +254,12 @@ $$
 ## 4. 系统实现与测试
 
 ### 4.1 开发环境
-*   **Operating System**: Windows / Linux
-*   **Database**: MySQL 8.0 / PostgreSQL 14
-*   **Frontend**: (e.g., Python PyQt5 / Java Swing / Vue.js)
-*   **Backend**: (e.g., Python Flask / Java SpringBoot)
+*   **Operating System**: Windows
+*   **Database**: Microsoft SQL Server 2019 
+*   **IDE**: SQL Server Management Studio (SSMS)
+*   **编程语言**: Python 3.10
+*   **Web Framework**: Django 4.2
+*   **前端框架**: Bootstrap 5
 
 ### 4.2 关键功能展示
 *(此处插入关键功能的运行截图)*

@@ -17,7 +17,7 @@
                     {% csrf_token %}
                     <div class="mb-3">
                         <label class="form-label">待分配运单</label>
-                        <select class="form-select" name="order_id" required>
+                        <select class="form-select" name="order_id" id="select-order-id" required>
                             <option value="">请选择运单</option>
                             {% for order in pending_orders %}
                                 <option value="{{ order.order_id }}">{{ order.order_id }} - {{ order.destination }}</option>
@@ -61,6 +61,7 @@
                                 <th>目的地</th>
                                 <th class="text-end">重量（吨）</th>
                                 <th class="text-end">体积（立方米）</th>
+                                <th class="text-center">操作</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -70,10 +71,15 @@
                                 <td>{{ order.destination }}</td>
                                 <td class="text-end">{{ order.cargo_weight }}</td>
                                 <td class="text-end">{{ order.cargo_volume }}</td>
+                                <td class="text-center">
+                                    <button class="btn btn-sm btn-outline-primary py-0" type="button" onclick="selectOrder('{{ order.order_id }}')">
+                                        分配
+                                    </button>
+                                </td>
                             </tr>
                             {% empty %}
                             <tr>
-                                <td colspan="4" class="text-muted text-center">暂无待分配运单。</td>
+                                <td colspan="5" class="text-muted text-center">暂无待分配运单。</td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -111,7 +117,7 @@
                         <td>{{ order.destination }}</td>
                         <td>
                             <div class="d-flex align-items-center">
-                                <span class="badge bg-secondary text-dark bg-opacity-10 border border-secondary me-2">
+                                <span class="badge {{ order.badge_class }} me-2">
                                     {{ order.status_label }}
                                 </span>
                                 {% if order.status == 'Loading' or order.status == 'In-Transit' %}
@@ -143,7 +149,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="6" class="text-muted text-center">暂无运单记录。</td>
+                        <td colspan="9" class="text-muted text-center">暂无运单记录。</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -151,4 +157,21 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function selectOrder(orderId) {
+        const select = document.getElementById('select-order-id');
+        if (select) {
+            select.value = orderId;
+            select.focus();
+            select.style.transition = "background-color 0.2s";
+            select.style.backgroundColor = "#e8f0fe";
+            setTimeout(() => {
+                select.style.backgroundColor = "";
+            }, 300);
+        }
+    }
+</script>
 {% endblock %}

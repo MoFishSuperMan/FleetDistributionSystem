@@ -15,6 +15,7 @@
             <div class="card-body">
                 <form method="post">
                     {% csrf_token %}
+                    <input type="hidden" name="action" value="create">
                     <div class="mb-3">
                         <label class="form-label">车辆</label>
                         <select class="form-select" name="vehicle_plate" required>
@@ -75,6 +76,7 @@
                                 <th>异常类型</th>
                                 <th>处理状态</th>
                                 <th>发生时间</th>
+                                <th class="text-center">操作</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -84,12 +86,30 @@
                                 <td>{{ record.vehicle_plate.plate_number }}</td>
                                 <td>{{ record.driver.name }}</td>
                                 <td>{{ record.exception_type_label }}</td>
-                                <td>{{ record.handle_status_label }}</td>
-                                <td>{{ record.occur_time }}</td>
+                                <td>
+                                    {% if record.handle_status == 'Unprocessed' %}
+                                        <span class="badge bg-danger">未处理</span>
+                                    {% else %}
+                                        <span class="badge bg-success">已处理</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ record.occur_time|date:"Y-m-d H:i" }}</td>
+                                <td class="text-center">
+                                    {% if record.handle_status == 'Unprocessed' %}
+                                    <form method="post" onsubmit="return confirm('确认标记为已处理？');">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="resolve">
+                                        <input type="hidden" name="record_id" value="{{ record.record_id }}">
+                                        <button class="btn btn-sm btn-outline-success py-0" type="submit">处理</button>
+                                    </form>
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
                             </tr>
                             {% empty %}
                             <tr>
-                                <td colspan="6" class="text-muted text-center">暂无异常记录。</td>
+                                <td colspan="7" class="text-muted text-center">暂无异常记录。</td>
                             </tr>
                             {% endfor %}
                         </tbody>

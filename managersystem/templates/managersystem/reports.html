@@ -2,15 +2,15 @@
 
 {% block content %}
 <div class="headerdiv text-center">
-    <h1 class="h3 headertext">报表查询</h1>
-    <p class="text-muted mb-0">车队月度绩效与司机表现统计。</p>
+    <h1 class="h3 headertext">统计报表</h1>
+    <p class="text-muted mb-0">车队月度安全与效率报表及司机表现统计。</p>
 </div>
 
 <div class="row g-3 mb-4">
     <div class="col-lg-6">
         <div class="card border-0 shadow-sm h-100">
             <div class="card-header bg-white">
-                <strong>车队月度报表</strong>
+                <strong>车队月度报表 (安全与效率)</strong>
             </div>
             <div class="card-body">
                 <form class="row g-3 mb-3" method="get">
@@ -26,8 +26,8 @@
                         </select>
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label">月份日期</label>
-                        <input type="date" class="form-control" name="report_date" value="{{ report_date }}" required>
+                        <label class="form-label">统计月份</label>
+                        <input type="month" class="form-control" name="report_date" value="{{ report_date }}" required>
                     </div>
                     <div class="col-12">
                         <button class="btn btn-primary w-100" type="submit">查询报表</button>

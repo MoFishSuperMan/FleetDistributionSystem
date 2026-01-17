@@ -1,7 +1,7 @@
 from django.shortcuts import render, redirect
 from django.http import JsonResponse
 from django.db import connection, transaction, IntegrityError
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.contrib import messages
 from django.contrib.auth import authenticate, login as auth_login, logout as auth_logout
 from django.contrib.auth.decorators import login_required
@@ -36,7 +36,7 @@ HANDLE_STATUS_LABELS = {
 }
 
 ROLE_LABELS = {
-    "dispatcher": "部门主管",
+    "dispatcher": "调度主管",
     "driver": "司机",
 }
 
@@ -92,7 +92,7 @@ def _ensure_driver(request):
     if role == "driver":
         return None
     if role == "dispatcher":
-        messages.error(request, "当前为部门主管身份，无法访问司机页面。")
+        messages.error(request, "当前为调度主管身份，无法访问司机页面。")
         return redirect("dashboard")
     
     return redirect("driver_login")
@@ -659,28 +659,38 @@ def order_page(request):
     recent_orders = Order.objects.select_related("vehicle_plate", "driver").order_by("-start_time", "-order_id")
     for order in pending_orders:
         order.status_label = ORDER_STATUS_LABELS.get(order.status, order.status)
-    for order in recent_orders:
-        order.status_label = ORDER_STATUS_LABELS.get(order.status, order.status)
-        # 增加颜色类逻辑
-        if order.status == "Pending":
-            order.row_class = "table-light"
-        elif order.status == "Loading":
-            order.row_class = "table-warning" 
-        elif order.status == "In-Transit":
-            order.row_class = "table-info" # 淡蓝色/信息色
-        elif order.status == "Delivered":
-            order.row_class = "table-success"
-        else:
-            order.row_class = ""
+    # logic moved to loop above
 
     vehicles = Vehicle.objects.order_by("plate_number")
     drivers = Driver.objects.order_by("driver_id")
     if dispatcher_fleet_id:
-        recent_orders = recent_orders.filter(vehicle_plate__fleet_id=dispatcher_fleet_id)
+        # 显示本车队的运单 + 所有待分配运单 (Pending)
+        recent_orders = recent_orders.filter(
+            Q(vehicle_plate__fleet_id=dispatcher_fleet_id) | Q(status='Pending')
+        )
         vehicles = vehicles.filter(fleet_id=dispatcher_fleet_id)
         drivers = drivers.filter(fleet_id=dispatcher_fleet_id)
 
     # recent_orders = recent_orders[:50] # Removed limit
+    for order in recent_orders:
+        order.status_label = ORDER_STATUS_LABELS.get(order.status, order.status)
+        # 增加颜色类逻辑 - 对应用户需求：运输中黄色，已完成绿色
+        if order.status == "Pending":
+            order.row_class = ""
+            order.badge_class = "bg-secondary"
+        elif order.status == "Loading":
+            order.row_class = "table-info" 
+            order.badge_class = "bg-info text-dark"
+        elif order.status == "In-Transit":
+            order.row_class = "table-warning" # 黄色
+            order.badge_class = "bg-warning text-dark"
+        elif order.status == "Delivered":
+            order.row_class = "table-success" # 绿色
+            order.badge_class = "bg-success"
+        else:
+            order.row_class = ""
+            order.badge_class = "bg-secondary"
+
     for vehicle in vehicles:
         vehicle.status_label = VEHICLE_STATUS_LABELS.get(vehicle.status, vehicle.status)
 
@@ -703,6 +713,32 @@ def exception_page(request):
 
     dispatcher_fleet_id = request.session.get("fleet_id")
     if request.method == "POST":
+        action = request.POST.get("action")
+        
+        # 1. Resolve Exception (Update Status)
+        if action == "resolve":
+            record_id = request.POST.get("record_id")
+            if not record_id:
+                 messages.error(request, "参数错误。")
+            else:
+                try:
+                    record = ExceptionRecord.objects.get(record_id=record_id)
+                    # Optional: Check fleet permission if needed
+                    # if dispatcher_fleet_id and record.vehicle_plate.fleet_id != dispatcher_fleet_id: ...
+                    
+                    if record.handle_status == "Unprocessed":
+                        record.handle_status = "Processed"
+                        record.save()
+                        messages.success(request, f"异常记录 {record_id} 已处理。")
+                    else:
+                        messages.info(request, "该记录已被处理。")
+                except ExceptionRecord.DoesNotExist:
+                    messages.error(request, "记录不存在。")
+                except Exception as e:
+                     messages.error(request, f"处理失败: {e}")
+            return redirect("exception_page")
+
+        # 2. Create Exception (Default)
         vehicle_plate = request.POST.get("vehicle_plate", "").strip()
         driver_id = request.POST.get("driver_id", "").strip()
         exception_type = request.POST.get("exception_type", "").strip()
@@ -789,12 +825,15 @@ def report_page(request):
             fleet_error = "只能查询自己车队的报表。"
         else:
             try:
+                # 适配 month input (YYYY-MM)，补充为 YYYY-MM-01
+                full_date = report_date + "-01" if len(report_date) == 7 else report_date
+
                 with connection.cursor() as cursor:
-                    cursor.execute("EXEC SP_Calc_Fleet_Monthly_Report %s, %s", [fleet_id, report_date])
+                    cursor.execute("EXEC SP_Calc_Fleet_Monthly_Report %s, %s", [fleet_id, full_date])
                     columns = [col[0] for col in cursor.description]
                     fleet_report = [dict(zip(columns, row)) for row in cursor.fetchall()]
             except Exception as exc:
-                fleet_error = f"报表查询失败：{exc}"
+                fleet_error = f"统计报表查询失败：{exc}"
 
     driver_id = request.GET.get("driver_id", "").strip()
     start_date = request.GET.get("start_date", "").strip()
@@ -818,7 +857,7 @@ def report_page(request):
                             detail_columns = [col[0] for col in cursor.description]
                             driver_exceptions = [dict(zip(detail_columns, row)) for row in detail_rows]
             except Exception as exc:
-                driver_error = f"报表查询失败：{exc}"
+                driver_error = f"统计报表查询失败：{exc}"
 
     return render(
         request,
