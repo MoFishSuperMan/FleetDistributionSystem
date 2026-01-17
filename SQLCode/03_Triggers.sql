@@ -1,14 +1,7 @@
 USE FleetDistributionDB;
 GO
 
--- =============================================
 -- 1. TRG_Load_Check (安全校验 & 状态校验)
--- =============================================
--- 逻辑：
--- 1. 触发时机：INSERT, UPDATE (适配运单分配或信息变更)。
--- 2. 状态校验：仅允许非繁忙状态（Idle）的车辆接受任务；禁止分配给 Busy/Exception/Maintenance 状态的车辆。
--- 3. 容量校验：动态计算车辆当前剩余载重与容积（未完成运单累加），防止超载。
--- 4. 车队校验：确保分配的司机与车辆属于同一车队。
 IF OBJECT_ID('TRG_Load_Check', 'TR') IS NOT NULL DROP TRIGGER TRG_Load_Check;
 GO
 
@@ -33,7 +26,6 @@ BEGIN
     DECLARE @DriverFleetID INT;
     DECLARE @VehicleStatus NVARCHAR(20);
 
-    -- 简化处理：假设单次操作涉及同一车辆（通常 UI 操作是单条 update）
     -- 选取涉及车辆的任意一条记录进行检查
     SELECT TOP 1 
         @VehiclePlate = vehicle_plate, 
@@ -44,8 +36,6 @@ BEGIN
     IF @VehiclePlate IS NULL RETURN;
 
     -- A. 状态校验: 只允许分配 Idle (空闲) 的车辆
-    -- 注意：如果车辆当前是 Idle，但已经有 Loading 状态的运单，我们仍然认为是 Idle 阶段（装货中），允许继续配载。
-    -- 一旦车辆变成 Busy (已发车/运输中)，则禁止再分配。
     SELECT @VehicleStatus = status FROM Vehicle WHERE plate_number = @VehiclePlate;
     
     IF @VehicleStatus IN ('Busy', 'Exception', 'Maintenance')
@@ -77,7 +67,6 @@ BEGIN
     WHERE plate_number = @VehiclePlate;
 
     -- 计算该车辆当前所有未完成运单的总重/总体积 (状态不为 Delivered)
-    -- 注意：AFTER TRIGGER，inserted 中的数据已存在于表中，直接 SUM 即可
     SELECT 
         @CurrentWeight = ISNULL(SUM(cargo_weight), 0),
         @CurrentVolume = ISNULL(SUM(cargo_volume), 0)
@@ -101,12 +90,9 @@ BEGIN
 END;
 GO
 
--- =============================================
+
 -- 2. TRG_Auto_Status_Update (车辆状态自动流转)
--- =============================================
--- 逻辑：
--- 1. 发车自动锁定：当运单状态更新为 'In-Transit' (运输中) 时，若车辆为空闲状态，自动变更为 'Busy' (繁忙)。
--- 2. 完单自动释放：当运单状态更新为 'Delivered' (已送达) 时，检查车辆是否不再有未完成的活跃运单。若无，则自动恢复为 'Idle' (空闲)。
+
 IF OBJECT_ID('TRG_Auto_Status_Update', 'TR') IS NOT NULL DROP TRIGGER TRG_Auto_Status_Update;
 GO
 
@@ -145,13 +131,12 @@ BEGIN
     WHILE @@FETCH_STATUS = 0
     BEGIN
         -- 检查该车辆是否还有未完成的运单 (Pending, Loading, In-Transit)
-        SELECT @ActiveOrdersCount = COUNT(*)
+        SELECT @ActiveOrdersCount = COUNT()
         FROM [Order]
         WHERE vehicle_plate = @VehiclePlate 
           AND status IN ('Pending', 'Loading', 'In-Transit');
 
         -- 如果没有活跃运单，且车辆当前是 Busy (或 Loading)，则恢复为 Idle
-        -- 注意不覆盖 Exception/Maintenance
         IF @ActiveOrdersCount = 0
         BEGIN
             UPDATE Vehicle
@@ -168,10 +153,9 @@ BEGIN
 END;
 GO
 
--- =============================================
+
 -- 3. TRG_Exception_Flag (异常标记)
--- =============================================
--- 逻辑：一旦录入异常，立即将关联车辆状态锁定为 Exception。
+
 IF OBJECT_ID('TRG_Exception_Flag', 'TR') IS NOT NULL DROP TRIGGER TRG_Exception_Flag;
 GO
 
@@ -190,10 +174,8 @@ BEGIN
 END;
 GO
 
--- =============================================
+
 -- 4. TRG_Exception_Recovery (智能恢复)
--- =============================================
--- 逻辑：当异常记录更新为 Processed，检查车辆是否所有异常都处理完毕。
 IF OBJECT_ID('TRG_Exception_Recovery', 'TR') IS NOT NULL DROP TRIGGER TRG_Exception_Recovery;
 GO
 
@@ -203,7 +185,6 @@ AFTER UPDATE
 AS
 BEGIN
     SET NOCOUNT ON;
-    
     -- 只关注处理状态变更
     IF NOT UPDATE(handle_status) RETURN;
 
@@ -247,10 +228,7 @@ BEGIN
 END;
 GO
 
--- =============================================
 -- 5. TRG_Exception_Audit (异常审计)
--- =============================================
--- 逻辑：当处理状态变更时，向 History_Log 插入审计记录。
 IF OBJECT_ID('TRG_Exception_Audit', 'TR') IS NOT NULL DROP TRIGGER TRG_Exception_Audit;
 GO
 
@@ -280,10 +258,8 @@ BEGIN
 END;
 GO
 
--- =============================================
+
 -- 6. TRG_Driver_Update_Audit (司机信息审计)
--- =============================================
--- 逻辑：监控驾照等级等关键信息变更，记录旧值到 History_Log。
 IF OBJECT_ID('TRG_Driver_Update_Audit', 'TR') IS NOT NULL DROP TRIGGER TRG_Driver_Update_Audit;
 GO
 
@@ -293,7 +269,6 @@ AFTER UPDATE
 AS
 BEGIN
     SET NOCOUNT ON;
-
     DECLARE @Operator NVARCHAR(50);
     -- 从CONTEXT_INFO读取操作人，如果没有设置则使用System_Trigger
     SELECT @Operator = ISNULL(CAST(CONTEXT_INFO() AS NVARCHAR(50)), 'System_Trigger');

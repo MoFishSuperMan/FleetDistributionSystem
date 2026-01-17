@@ -1,10 +1,8 @@
 USE FleetDistributionDB;
 GO
 
--- =============================================
 -- 1. VW_Weekly_Alert (本周异常警报)
 -- 展示最近 7 天发生过异常的车辆和司机，供仪表盘调用
--- =============================================
 IF OBJECT_ID('VW_Weekly_Alert', 'V') IS NOT NULL DROP VIEW VW_Weekly_Alert;
 GO
 
@@ -26,10 +24,9 @@ LEFT JOIN Fleet f ON v.fleet_id = f.fleet_id
 WHERE er.occur_time >= DATEADD(DAY, -7, GETDATE());
 GO
 
--- =============================================
+
 -- 2. VW_Center_Resource_Status (资源汇总)
 -- 联表查询 Vehicle-Fleet-Distribution_Center，方便按配送中心层级查看车辆状态
--- =============================================
 IF OBJECT_ID('VW_Center_Resource_Status', 'V') IS NOT NULL DROP VIEW VW_Center_Resource_Status;
 GO
 

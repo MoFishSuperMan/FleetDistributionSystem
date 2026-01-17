@@ -27,12 +27,7 @@ CREATE NONCLUSTERED INDEX IDX_Exception_Driver
 ON Exception_Record (driver_id);
 GO
 
--- 4. 优化主管登录查询
--- 主键 dispatcher_id 是否已自动建聚集索引？是。
--- 这里我们假设 dispatcher_id 已是 PK，但如果常按 name 查询（虽然不推荐），可以加索引。
--- 此处不需要额外索引，但如果 frequent join on fleet_id，可以考虑。
-
--- 5. 优化运单-车辆关联查询
+-- 4. 优化运单-车辆关联查询
 -- 触发器中大量使用 WHERE vehicle_plate = ...
 IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IDX_Order_Vehicle' AND object_id = OBJECT_ID('[Order]'))
 CREATE NONCLUSTERED INDEX IDX_Order_Vehicle
