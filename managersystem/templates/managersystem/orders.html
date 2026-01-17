@@ -160,6 +160,24 @@
 {% endblock %}
 
 {% block extra_js %}
+<!-- 消息提示 Modal -->
+<div class="modal fade" id="messageModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header" id="modalHeader">
+                <h5 class="modal-title" id="modalTitle">提示</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <!-- 消息内容 -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
     function selectOrder(orderId) {
         const select = document.getElementById('select-order-id');
@@ -172,6 +190,44 @@
                 select.style.backgroundColor = "";
             }, 300);
         }
+    }
+
+    // 页面加载时检查Django消息并显示弹窗
+    document.addEventListener('DOMContentLoaded', function() {
+        {% if messages %}
+            {% for message in messages %}
+                showMessageModal(
+                    '{{ message.message|escapejs }}',
+                    '{{ message.tags }}'
+                );
+            {% endfor %}
+        {% endif %}
+    });
+
+    function showMessageModal(messageText, messageType) {
+        const modal = new bootstrap.Modal(document.getElementById('messageModal'));
+        const modalHeader = document.getElementById('modalHeader');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalBody = document.getElementById('modalBody');
+
+        // 根据消息类型设置样式
+        modalHeader.className = 'modal-header';
+        if (messageType.includes('error') || messageType.includes('danger')) {
+            modalHeader.classList.add('bg-danger', 'text-white');
+            modalTitle.textContent = '错误';
+        } else if (messageType.includes('success')) {
+            modalHeader.classList.add('bg-success', 'text-white');
+            modalTitle.textContent = '成功';
+        } else if (messageType.includes('warning')) {
+            modalHeader.classList.add('bg-warning', 'text-dark');
+            modalTitle.textContent = '警告';
+        } else {
+            modalHeader.classList.add('bg-info', 'text-white');
+            modalTitle.textContent = '提示';
+        }
+
+        modalBody.textContent = messageText;
+        modal.show();
     }
 </script>
 {% endblock %}

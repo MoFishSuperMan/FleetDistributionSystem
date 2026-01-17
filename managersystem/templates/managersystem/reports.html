@@ -14,6 +14,11 @@
             </div>
             <div class="card-body">
                 <form class="row g-3 mb-3" method="get">
+                    <!-- 保留司机查询参数 -->
+                    {% if driver_id %}<input type="hidden" name="driver_id" value="{{ driver_id }}">{% endif %}
+                    {% if start_date %}<input type="hidden" name="start_date" value="{{ start_date }}">{% endif %}
+                    {% if end_date %}<input type="hidden" name="end_date" value="{{ end_date }}">{% endif %}
+                    
                     <div class="col-md-6">
                         <label class="form-label">车队</label>
                         <select class="form-select" name="fleet_id" required>
@@ -36,33 +41,35 @@
 
                 {% if fleet_error %}
                     <div class="alert alert-warning mb-0">{{ fleet_error }}</div>
-                {% elif fleet_report %}
-                    {% with row=fleet_report.0 %}
-                    <div class="table-responsive">
-                        <table class="table table-sm align-middle">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>车队</th>
-                                    <th>月份</th>
-                                    <th class="text-end">总运单数</th>
-                                    <th class="text-end">异常数</th>
-                                    <th class="text-end">罚款总额</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td>{{ row.fleet_name }}</td>
-                                    <td>{{ row.report_month }}</td>
-                                    <td class="text-end">{{ row.total_orders }}</td>
-                                    <td class="text-end">{{ row.total_exceptions }}</td>
-                                    <td class="text-end">{{ row.total_fine_amount }}</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                    {% endwith %}
                 {% else %}
-                    <p class="text-muted mb-0">请选择条件并查询车队报表。</p>
+                    {% if fleet_report %}
+                        {% with row=fleet_report.0 %}
+                        <div class="table-responsive">
+                            <table class="table table-sm align-middle">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>车队</th>
+                                        <th>月份</th>
+                                        <th class="text-end">总运单数</th>
+                                        <th class="text-end">异常数</th>
+                                        <th class="text-end">罚款总额</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>{{ row.fleet_name }}</td>
+                                        <td>{{ row.report_month }}</td>
+                                        <td class="text-end">{{ row.total_orders }}</td>
+                                        <td class="text-end">{{ row.total_exceptions }}</td>
+                                        <td class="text-end">{{ row.total_fine_amount }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        {% endwith %}
+                    {% else %}
+                        <p class="text-muted mb-0">请选择条件并查询车队报表。</p>
+                    {% endif %}
                 {% endif %}
             </div>
         </div>
@@ -74,6 +81,10 @@
             </div>
             <div class="card-body">
                 <form class="row g-3 mb-3" method="get">
+                    <!-- 保留车队查询参数 -->
+                    {% if fleet_id %}<input type="hidden" name="fleet_id" value="{{ fleet_id }}">{% endif %}
+                    {% if report_date %}<input type="hidden" name="report_date" value="{{ report_date }}">{% endif %}
+                    
                     <div class="col-12">
                         <label class="form-label">司机</label>
                         <select class="form-select" name="driver_id" required>
@@ -100,61 +111,63 @@
 
                 {% if driver_error %}
                     <div class="alert alert-warning mb-0">{{ driver_error }}</div>
-                {% elif driver_report %}
-                    {% with row=driver_report.0 %}
-                    <div class="table-responsive mb-3">
-                        <table class="table table-sm align-middle">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>司机姓名</th>
-                                    <th>司机工号</th>
-                                    <th class="text-end">完成单数</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td>{{ row.name }}</td>
-                                    <td>{{ row.driver_id }}</td>
-                                    <td class="text-end">{{ row.completed_orders_count }}</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                    {% endwith %}
-                    <div class="table-responsive">
-                        <table class="table table-sm align-middle">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>记录ID</th>
-                                    <th>发生时间</th>
-                                    <th>异常类型</th>
-                                    <th>具体事件</th>
-                                    <th class="text-end">罚款金额</th>
-                                    <th>处理状态</th>
-                                    <th>描述</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for row in driver_exceptions %}
-                                <tr>
-                                    <td>{{ row.record_id }}</td>
-                                    <td>{{ row.occur_time }}</td>
-                                    <td>{{ row.exception_type }}</td>
-                                    <td>{{ row.specific_event }}</td>
-                                    <td class="text-end">{{ row.fine_amount }}</td>
-                                    <td>{{ row.handle_status }}</td>
-                                    <td>{{ row.description }}</td>
-                                </tr>
-                                {% empty %}
-                                <tr>
-                                    <td colspan="7" class="text-muted text-center">该时间段暂无异常记录。</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
                 {% else %}
-                    <p class="text-muted mb-0">请选择条件并查询司机绩效。</p>
+                    {% if driver_report %}
+                        {% with row=driver_report.0 %}
+                        <div class="table-responsive mb-3">
+                            <table class="table table-sm align-middle">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>司机姓名</th>
+                                        <th>司机工号</th>
+                                        <th class="text-end">完成单数</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>{{ row.name }}</td>
+                                        <td>{{ row.driver_id }}</td>
+                                        <td class="text-end">{{ row.completed_orders_count }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        {% endwith %}
+                        <div class="table-responsive">
+                            <table class="table table-sm align-middle">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>记录ID</th>
+                                        <th>发生时间</th>
+                                        <th>异常类型</th>
+                                        <th>具体事件</th>
+                                        <th class="text-end">罚款金额</th>
+                                        <th>处理状态</th>
+                                        <th>描述</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for row in driver_exceptions %}
+                                    <tr>
+                                        <td>{{ row.record_id }}</td>
+                                        <td>{{ row.occur_time }}</td>
+                                        <td>{{ row.exception_type }}</td>
+                                        <td>{{ row.specific_event }}</td>
+                                        <td class="text-end">{{ row.fine_amount }}</td>
+                                        <td>{{ row.handle_status }}</td>
+                                        <td>{{ row.description }}</td>
+                                    </tr>
+                                    {% empty %}
+                                    <tr>
+                                        <td colspan="7" class="text-muted text-center">该时间段暂无异常记录。</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="text-muted mb-0">请选择条件并查询司机绩效。</p>
+                    {% endif %}
                 {% endif %}
             </div>
         </div>

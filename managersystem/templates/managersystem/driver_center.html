@@ -118,20 +118,39 @@
                                 <th>车辆</th>
                                 <th>发车时间</th>
                                 <th>签收时间</th>
+                                <th class="text-center">操作</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for order in orders %}
                             <tr>
                                 <td>{{ order.order_id }}</td>
-                                <td>{{ order.status_label }}</td>
+                                <td>
+                                    <span class="badge {% if order.status == 'In-Transit' %}bg-warning text-dark{% elif order.status == 'Delivered' %}bg-success{% else %}bg-secondary{% endif %}">
+                                        {{ order.status_label }}
+                                    </span>
+                                </td>
                                 <td>{{ order.vehicle_plate.plate_number }}</td>
-                                <td>{{ order.start_time }}</td>
-                                <td>{{ order.end_time }}</td>
+                                <td>{{ order.start_time|date:"Y-m-d H:i" }}</td>
+                                <td>{{ order.end_time|date:"Y-m-d H:i"|default:"-" }}</td>
+                                <td class="text-center">
+                                    {% if order.status == 'In-Transit' %}
+                                    <form method="post" class="d-inline">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="complete_order">
+                                        <input type="hidden" name="order_id" value="{{ order.order_id }}">
+                                        <button type="submit" class="btn btn-sm btn-success" onclick="return confirm('确认完成运单 {{ order.order_id }} 吗？')">
+                                            <i class="fa fa-check"></i> 已完成
+                                        </button>
+                                    </form>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
                             </tr>
                             {% empty %}
                             <tr>
-                                <td colspan="5" class="text-muted text-center">暂无运单记录。</td>
+                                <td colspan="6" class="text-muted text-center">暂无运单记录。</td>
                             </tr>
                             {% endfor %}
                         </tbody>

@@ -58,7 +58,9 @@ INSERT INTO Vehicle (plate_number, fleet_id, max_weight, max_volume, status) VAL
 
 -- B. 华南重卡队 (fleet_id=2): 干线重卡
 INSERT INTO Vehicle (plate_number, fleet_id, max_weight, max_volume, status) VALUES 
-('粤B-99999', 2, 30.00, 100.00, 'Maintenance'); -- 维修中
+('粤B-99999', 2, 30.00, 100.00, 'Maintenance'), -- 维修中
+('粤B-88888', 2, 30.00, 100.00, 'Idle'),        -- 新增大货车(空闲)
+('粤B-77777', 2, 30.00, 100.00, 'Busy');        -- 新增大货车(运输中)
 
 -- C. 测试队 (fleet_id=3)
 INSERT INTO Vehicle (plate_number, fleet_id, max_weight, max_volume, status) VALUES 
@@ -76,6 +78,8 @@ INSERT INTO Driver (driver_id, name, password, license_level, phone, fleet_id) V
 
 -- 所属 华南重卡队 (2)
 ('DR005', '王重阳', '123456', 'A1', '13900000005', 2),
+('DR006', '张飞',   '123456', 'A1', '13900000006', 2), -- 匹配 粤B-88888
+('DR007', '赵云',   '123456', 'A1', '13900000007', 2), -- 匹配 粤B-77777
 
 -- 所属 测试队 (3)
 ('DR000', '测试员', '123456', 'C1', '13666666666', 3);
@@ -84,15 +88,18 @@ GO
 -- 6. 插入运单 (Order)
 INSERT INTO [Order] (Order_id, cargo_weight, cargo_volume, destination, status, vehicle_plate, driver_id, start_time, end_time) VALUES 
 -- 1. 待分配新订单 (用于分配测试)
-('ORD-GZ-001', 3.50, 10.00, '广州天河', 'Pending', NULL, NULL, NULL, NULL),
-('ORD-GZ-002', 10.00, 20.00, '佛山顺德', 'Pending', NULL, NULL, NULL, NULL), -- 重量较大，测试超载
+('ORD-GZ-004', 2.00, 5.00,  '广州番禺', 'Pending', NULL, NULL, NULL, NULL), -- 新增小订单
+('ORD-GZ-005', 25.00, 80.00, '惠州惠城', 'Pending', NULL, NULL, NULL, NULL), -- 新增特大订单
 
 -- 2. 正在运输的订单 (关联 粤A-00003, DR003)
 ('ORD-GZ-003', 3.00, 8.00, '东莞南城', 'In-Transit', '粤A-00003', 'DR003', DATEADD(HOUR, -2, GETDATE()), NULL),
+('ORD-GZ-006', 28.00, 90.00, '中山火炬', 'In-Transit', '粤B-77777', 'DR007', DATEADD(HOUR, -5, GETDATE()), NULL), -- 新增重卡订单
 
 -- 3. 历史已完成订单 (用于报表统计)
 ('ORD-GZ-HIST1', 4.00, 12.00, '深圳南山', 'Delivered', '粤A-00001', 'DR001', DATEADD(DAY, -5, GETDATE()), DATEADD(DAY, -4, GETDATE())),
-('ORD-GZ-HIST2', 4.50, 12.00, '珠海香洲', 'Delivered', '粤A-00001', 'DR001', DATEADD(DAY, -3, GETDATE()), DATEADD(DAY, -2, GETDATE()));
+('ORD-GZ-HIST2', 4.50, 12.00, '珠海香洲', 'Delivered', '粤A-00001', 'DR001', DATEADD(DAY, -3, GETDATE()), DATEADD(DAY, -2, GETDATE())),
+('ORD-GZ-HIST3', 15.00, 40.00, '佛山禅城', 'Delivered', '粤B-88888', 'DR006', DATEADD(DAY, -2, GETDATE()), DATEADD(DAY, -1, GETDATE())),
+('ORD-GZ-HIST4', 8.00, 20.00, '江门蓬江', 'Delivered', '粤A-00001', 'DR001', DATEADD(DAY, -7, GETDATE()), DATEADD(DAY, -6, GETDATE()));
 GO
 
 -- 7. 插入异常记录 (Exception_Record)
@@ -101,5 +108,8 @@ INSERT INTO Exception_Record (vehicle_plate, driver_id, occur_time, exception_ty
 ('粤A-00001', 'DR001', DATEADD(DAY, -10, GETDATE()), 'Idle_Exception', '车辆未按时归队', 200.00, 'Processed', '已扣除奖金'),
 
 -- 2. 未处理的当前异常 (关联 粤A-00004) -> 触发器应该在插入时将车辆状态置为 Exception (这里直接插入数据，状态在Vehicle插入时已设为Exception)
-('粤A-00004', 'DR004', DATEADD(HOUR, -1, GETDATE()), 'Transit_Exception', '车辆抛锚', 500.00, 'Unprocessed', '等待维修救援');
+('粤A-00004', 'DR004', DATEADD(HOUR, -1, GETDATE()), 'Transit_Exception', '车辆抛锚', 500.00, 'Unprocessed', '等待维修救援'),
+
+-- 3. 已处理的轻微剐蹭 (张飞/粤B-88888)
+('粤B-88888', 'DR006', DATEADD(DAY, -5, GETDATE()), 'Transit_Exception', '轻微剐蹭', 100.00, 'Processed', '司机自行承担');
 GO

@@ -10,6 +10,90 @@
 
 ---
 
+## 0.5 系统架构
+
+### 用户组织架构图
+
+```mermaid
+graph TD
+    UserRoot((系统用户))
+
+    %% 分支1：管理员
+    UserRoot --> Admin[系统管理员]
+    Admin -->|权限| A1[配送中心/车队管理]
+    Admin -->|权限| A2[全局统计报表]
+    Admin -->|权限| A3[系统审计日志]
+
+    %% 分支2：调度主管
+    UserRoot --> Dispatcher[调度主管]
+    Dispatcher -->|权限| B1[运单分配调度]
+    Dispatcher -->|权限| B2[车辆司机状态管理]
+    Dispatcher -->|权限| B3[本车队异常处理]
+
+    %% 分支3：司机
+    UserRoot --> Driver[司机]
+    Driver -->|权限| C1[查询我的运单]
+    Driver -->|权限| C2[更新运输状态]
+    Driver -->|权限| C3[异常问题上报]
+
+    style Admin fill:#f9f,stroke:#333,stroke-width:2px
+    style Dispatcher fill:#bbf,stroke:#333,stroke-width:2px
+    style Driver fill:#dfd,stroke:#333,stroke-width:2px
+```
+
+### 系统功能模块图
+
+```mermaid
+graph TD
+    %% 根节点
+    System[智慧物流车队与配送管理系统]
+
+    %% 第一层：功能模块分类
+    System --> AdminMod[管理员功能模块]
+    System --> DispMod[调度主管功能模块]
+    System --> DriverMod[司机端功能模块]
+
+    %% 第二层：管理员具体功能
+    AdminMod --> A1[配送中心监控]
+    AdminMod --> A2[全局数据看板]
+    AdminMod --> A3[统计报表查询]
+    AdminMod --> A4[审计日志审查]
+
+    %% 第二层：调度主管具体功能
+    DispMod --> B1[车队资源总览]
+    DispMod --> B2[运单分配调度]
+    DispMod --> B3[司机车辆管理]
+    DispMod --> B4[异常记录处理]
+
+    %% 第二层：司机具体功能
+    DriverMod --> C1[我的任务运单]
+    DriverMod --> C2[运输状态更新]
+    DriverMod --> C3[突发异常上报]
+
+    %% 样式定义 (仿照示例图风格)
+    style System fill:#fff,stroke:#333
+    
+    style AdminMod fill:#fff,stroke:#333,stroke-width:2px
+    style DispMod fill:#fff,stroke:#333,stroke-width:2px
+    style DriverMod fill:#fff,stroke:#333,stroke-width:2px
+    
+    style A1 fill:#fff,stroke:#333
+    style A2 fill:#fff,stroke:#333
+    style A3 fill:#fff,stroke:#333
+    style A4 fill:#fff,stroke:#333
+    
+    style B1 fill:#fff,stroke:#333
+    style B2 fill:#fff,stroke:#333
+    style B3 fill:#fff,stroke:#333
+    style B4 fill:#fff,stroke:#333
+    
+    style C1 fill:#fff,stroke:#333
+    style C2 fill:#fff,stroke:#333
+    style C3 fill:#fff,stroke:#333
+```
+
+---
+
 ## 1. 概念结构设计
 
 ### 1.1 实体集 (Entity Sets)
@@ -158,6 +242,12 @@ erDiagram
     Vehicle ||--|{ Exception_Record : "涉事 (1:N)"
     Driver ||--|{ Exception_Record : "涉事 (1:N)"
 ```
+
+## 1.4 用户角色与权限
+
+系统设计了三类用户角色：
+
+
 
 ---
 

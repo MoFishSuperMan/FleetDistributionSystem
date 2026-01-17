@@ -563,6 +563,10 @@ def driver_page(request):
                     driver.license_level = license_level
                     driver.phone = phone or None
                     driver.fleet_id = fleet_id
+                    # 设置操作人信息到CONTEXT_INFO
+                    operator = request.session.get('user_id', 'Unknown')
+                    with connection.cursor() as cursor:
+                        cursor.execute("DECLARE @op VARBINARY(128) = CAST(%s AS VARBINARY(128)); SET CONTEXT_INFO @op;", [operator])
                     driver.save()
                     messages.success(request, f"司机 {driver_id} 信息已更新。")
             except Driver.DoesNotExist:
@@ -678,7 +682,7 @@ def order_page(request):
                 order = Order.objects.get(order_id=order_id)
                 order.vehicle_plate_id = vehicle_plate
                 order.driver_id = driver_id
-                order.status = "Loading"
+                order.status = "In-Transit"
                 order.start_time = timezone.now()
                 order.save()
             messages.success(request, "运单分配成功。")
@@ -954,6 +958,28 @@ def driver_center(request):
     if not driver:
         messages.error(request, "未找到司机信息，请重新登录。")
         return redirect("driver_login")
+
+    # 处理运单完成操作
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "complete_order":
+            order_id = request.POST.get("order_id")
+            try:
+                order = Order.objects.get(order_id=order_id, driver_id=driver_id)
+                if order.status == "In-Transit":
+                    with connection.cursor() as cursor:
+                        cursor.execute(
+                            "UPDATE [Order] SET status = 'Delivered', end_time = GETDATE() WHERE Order_id = %s",
+                            [order_id]
+                        )
+                    messages.success(request, f"运单 {order_id} 已标记为已完成。")
+                else:
+                    messages.warning(request, f"只能完成运输中的运单。当前状态：{order.status}")
+            except Order.DoesNotExist:
+                messages.error(request, "运单不存在或无权操作。")
+            except Exception as e:
+                messages.error(request, f"操作失败：{e}")
+            return redirect("driver_center")
 
     start_date = request.GET.get("start_date", "").strip()
     end_date = request.GET.get("end_date", "").strip()

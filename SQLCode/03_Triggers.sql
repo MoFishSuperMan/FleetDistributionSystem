@@ -261,6 +261,11 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
+    DECLARE @Operator NVARCHAR(50);
+    -- 从CONTEXT_INFO读取操作人，如果没有设置则使用System_Trigger
+    SELECT @Operator = ISNULL(CAST(CONTEXT_INFO() AS NVARCHAR(50)), 'System_Trigger');
+    IF @Operator = '' SET @Operator = 'System_Trigger';
+
     INSERT INTO History_Log (table_name, record_key, column_name, old_value, new_value, operator)
     SELECT 
         'Exception_Record',
@@ -268,7 +273,7 @@ BEGIN
         'handle_status',
         d.handle_status,
         i.handle_status,
-        'System_Trigger'
+        @Operator
     FROM inserted i
     JOIN deleted d ON i.record_id = d.record_id
     WHERE i.handle_status <> d.handle_status;
@@ -289,6 +294,11 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
+    DECLARE @Operator NVARCHAR(50);
+    -- 从CONTEXT_INFO读取操作人，如果没有设置则使用System_Trigger
+    SELECT @Operator = ISNULL(CAST(CONTEXT_INFO() AS NVARCHAR(50)), 'System_Trigger');
+    IF @Operator = '' SET @Operator = 'System_Trigger';
+
     -- 监控 license_level 变更
     INSERT INTO History_Log (table_name, record_key, column_name, old_value, new_value, operator)
     SELECT 
@@ -297,22 +307,22 @@ BEGIN
         'license_level',
         d.license_level,
         i.license_level,
-        'System_Trigger'
+        @Operator
     FROM inserted i
     JOIN deleted d ON i.driver_id = d.driver_id
     WHERE i.license_level <> d.license_level;
 
-    -- 监控 phone 变更 (补充关键信息)
+    -- 监控 phone 变更 (补充关键信息，注意NULL值处理)
     INSERT INTO History_Log (table_name, record_key, column_name, old_value, new_value, operator)
     SELECT 
         'Driver',
         i.driver_id,
         'phone',
-        d.phone,
-        i.phone,
-        'System_Trigger'
+        ISNULL(d.phone, 'NULL'),
+        ISNULL(i.phone, 'NULL'),
+        @Operator
     FROM inserted i
     JOIN deleted d ON i.driver_id = d.driver_id
-    WHERE i.phone <> d.phone;
+    WHERE ISNULL(i.phone, '') <> ISNULL(d.phone, '');
 END;
 GO

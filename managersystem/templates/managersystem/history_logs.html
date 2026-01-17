@@ -8,11 +8,14 @@
     </div>
 </div>
 
-<div class="card shadow">
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-white">
+        <strong>审计日志列表</strong>
+    </div>
     <div class="card-body">
         <div class="table-responsive">
-            <table class="table table-hover table-striped align-middle">
-                <thead class="table-dark">
+            <table class="table table-hover align-middle">
+                <thead class="table-light">
                     <tr>
                         <th>日志ID</th>
                         <th>表名</th>
@@ -42,15 +45,15 @@
                             {% if log.column_name == 'license_level' %}
                                 驾照等级
                             {% elif log.column_name == 'phone' %}
-                                电话
+                                联系电话
                             {% elif log.column_name == 'handle_status' %}
                                 处理状态
                             {% else %}
                                 {{ log.column_name }}
                             {% endif %}
                         </td>
-                        <td class="text-danger">{{ log.old_value }}</td>
-                        <td class="text-success">{{ log.new_value }}</td>
+                        <td class="text-danger">{{ log.old_value|default:"-" }}</td>
+                        <td class="text-success">{{ log.new_value|default:"-" }}</td>
                         <td>{{ log.change_time|date:"Y-m-d H:i:s" }}</td>
                         <td>{{ log.operator }}</td>
                     </tr>
