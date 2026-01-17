@@ -45,6 +45,30 @@
     </div>
 </div>
 
+<!-- 车队概览 (Grid) -->
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white">
+        <strong>下属车队概览</strong>
+        <span class="text-muted small ms-2">点击车队卡片查看详情</span>
+    </div>
+    <div class="card-body">
+        <div class="row g-3">
+            {% for fleet in fleets %}
+            <div class="col-md-3 col-sm-6">
+                <div class="card h-100 fleet-card" onclick="showFleetDetails('{{ fleet.fleet_id }}')" style="cursor: pointer; transition: transform 0.2s;">
+                    <div class="card-body text-center">
+                        <h5 class="card-title text-primary mb-1">{{ fleet.fleet_name }}</h5>
+                        <small class="text-muted">ID: {{ fleet.fleet_id }}</small>
+                    </div>
+                </div>
+            </div>
+            {% empty %}
+            <div class="col-12 text-center text-muted">暂无车队数据</div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
 <!-- 车辆列表 -->
 <div class="card border-0 shadow-sm">
     <div class="card-header bg-white">
@@ -101,4 +125,128 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- 车队详情 Modal -->
+<div class="modal fade" id="fleetModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="fleetModalLabel">车队详情</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <strong>调度主管：</strong> <span id="modalDispatcher"></span>
+                </div>
+                
+                <ul class="nav nav-tabs mb-3" id="fleetTab" role="tablist">
+                    <li class="nav-item">
+                        <button class="nav-link active" id="vehicle-tab" data-bs-toggle="tab" data-bs-target="#vehicle-content" type="button">车辆信息</button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" id="driver-tab" data-bs-toggle="tab" data-bs-target="#driver-content" type="button">司机信息</button>
+                    </li>
+                </ul>
+                
+                <div class="tab-content">
+                    <div class="tab-pane fade show active" id="vehicle-content">
+                        <table class="table table-sm table-hover">
+                            <thead>
+                                <tr><th>车牌号</th><th>状态</th><th>最大载重</th><th>最大容积</th></tr>
+                            </thead>
+                            <tbody id="modalVehicleBody"></tbody>
+                        </table>
+                    </div>
+                    <div class="tab-pane fade" id="driver-content">
+                        <table class="table table-sm table-hover">
+                            <thead>
+                                <tr><th>工号</th><th>姓名</th><th>电话</th><th>驾照等级</th></tr>
+                            </thead>
+                            <tbody id="modalDriverBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 从后端传入的 JSON 数据
+    // 使用 escapejs 和 JSON.parse 避免编辑器语法提示错误，并防止 XSS
+    const fleetsData = JSON.parse('{{ fleets_json|escapejs }}');
+
+    function showFleetDetails(fleetId) {
+        const fleet = fleetsData.find(f => String(f.fleet_id) === String(fleetId));
+        if (!fleet) return;
+
+        // 1. 设置标题和主管
+        document.getElementById('fleetModalLabel').textContent = fleet.fleet_name;
+        document.getElementById('modalDispatcher').textContent = fleet.dispatcher;
+
+        // 2. 填充车辆表格
+        const vehicleBody = document.getElementById('modalVehicleBody');
+        vehicleBody.innerHTML = '';
+        if (fleet.vehicles && fleet.vehicles.length > 0) {
+            fleet.vehicles.forEach(v => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${v.plate_number}</td>
+                    <td>
+                        <span class="badge ${getStatusBadgeClass(v.status)}">${v.status_display}</span>
+                    </td>
+                    <td>${v.max_weight}</td>
+                    <td>${v.max_volume}</td>
+                `;
+                vehicleBody.appendChild(tr);
+            });
+        } else {
+            vehicleBody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">暂无车辆</td></tr>';
+        }
+
+        // 3. 填充司机表格
+        const driverBody = document.getElementById('modalDriverBody');
+        driverBody.innerHTML = '';
+        if (fleet.drivers && fleet.drivers.length > 0) {
+            fleet.drivers.forEach(d => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${d.driver_id}</td>
+                    <td>${d.name}</td>
+                    <td>${d.phone || '-'}</td>
+                    <td>${d.license_level}</td>
+                `;
+                driverBody.appendChild(tr);
+            });
+        } else {
+            driverBody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">暂无司机</td></tr>';
+        }
+
+        // 4. 显示 Modal
+        const modal = new bootstrap.Modal(document.getElementById('fleetModal'));
+        modal.show();
+    }
+
+    function getStatusBadgeClass(status) {
+        if (status === 'Idle') return 'bg-secondary';
+        if (status === 'Busy' || status === 'Loading') return 'bg-success';
+        if (status === 'Exception') return 'bg-danger';
+        if (status === 'Maintenance') return 'bg-warning text-dark';
+        return 'bg-secondary';
+    }
+    
+    // 简单的悬停效果增强
+    document.querySelectorAll('.fleet-card').forEach(card => {
+        card.addEventListener('mouseenter', () => {
+            card.classList.add('shadow');
+            card.style.transform = 'translateY(-2px)';
+        });
+        card.addEventListener('mouseleave', () => {
+            card.classList.remove('shadow');
+            card.style.transform = '';
+        });
+    });
+</script>
 {% endblock %}
